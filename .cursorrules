@@ -1,0 +1,19 @@
+# Python code formatting and linting rules for Cursor
+
+## Code Formatting
+- Use `ruff format` to format code (handles trailing spaces, indentation, etc.)
+- Use `ruff check --fix` to auto-fix linting issues
+- Maximum line length: 100 characters
+- Use double quotes for strings
+- Remove trailing whitespace from all lines
+
+## Before committing
+Run: `ruff format . && ruff check --fix .`
+
+## Code Style
+- Follow PEP 8 conventions
+- Use type hints where possible
+- Keep docstrings concise and clear
+- Remove trailing whitespace
+- Use consistent indentation (4 spaces)
+
