@@ -45,7 +45,7 @@ def create_register_nutritional_info_tool(user_id: int, redirect_uri: str | None
             carbs: Carbohydrates value in grams
             fats: Fats value in grams
             meal_type: Type of meal (e.g., Breakfast, Lunch, Dinner, Snack)
-            extra_details: Optional extra details or description
+            extra_details: Detailed breakdown including: list of ingredients, estimated portions/quantities for each ingredient, and nutritional breakdown per ingredient (calories, proteins, carbs, fats). This field is highly recommended for complete record keeping.
 
         Returns:
             str: Success message or authorization URL with instructions

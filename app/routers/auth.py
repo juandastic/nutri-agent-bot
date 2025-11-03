@@ -3,8 +3,8 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.db.utils import get_or_create_user, save_spreadsheet_config
-from app.services.google_oauth_service import exchange_code_for_tokens, get_authorization_url
+from app.db.utils import save_spreadsheet_config
+from app.services.google_oauth_service import exchange_code_for_tokens
 from app.utils.logging import get_logger
 
 router = APIRouter(tags=["auth"])
@@ -37,66 +37,6 @@ def _get_redirect_uri_from_request(request: Request) -> str:
     redirect_uri = f"{base_url}/auth/google/callback"
 
     return redirect_uri
-
-
-@router.get("/auth/google/authorize")
-async def authorize(request: Request, telegram_user_id: int):
-    """
-    Generate Google OAuth authorization URL.
-
-    Args:
-        request: FastAPI Request object
-        telegram_user_id: Telegram user ID
-
-    Returns:
-        JSONResponse with authorization_url
-    """
-    try:
-        # Get or create user to obtain internal user_id
-        user = await get_or_create_user(
-            telegram_user_id=telegram_user_id,
-            username=None,
-            first_name=None,
-        )
-        user_id = user["id"]
-
-        # Get redirect URI dynamically from request
-        scheme = request.url.scheme
-        host = request.headers.get("host") or request.headers.get("x-forwarded-host")
-
-        if not host:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Cannot determine redirect URI from request headers. "
-                    "Make sure you're calling this endpoint via the public URL (e.g., ngrok URL)."
-                ),
-            )
-
-        base_url = f"{scheme}://{host}"
-        redirect_uri = f"{base_url}/auth/google/callback"
-
-        authorization_url = get_authorization_url(user_id, redirect_uri)
-
-        logger.info(
-            f"Generated authorization URL | user_id={user_id} | telegram_user_id={telegram_user_id}"
-        )
-
-        return JSONResponse(
-            content={
-                "success": True,
-                "authorization_url": authorization_url,
-                "message": "Please authorize the application to access your Google Sheets",
-            }
-        )
-
-    except Exception as e:
-        logger.error(
-            f"Error generating authorization URL | telegram_user_id={telegram_user_id} | error={str(e)}"
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to generate authorization URL: {str(e)}"
-        )
 
 
 @router.get("/auth/google/callback")

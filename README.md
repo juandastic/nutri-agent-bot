@@ -238,7 +238,36 @@ curl -X POST https://abc123.ngrok.io/setup-webhook
 
 ## Environment Variables
 
+### Required
 - `TELEGRAM_BOT_TOKEN`: Your Telegram bot token (required)
+- `SUPABASE_URL`: Your Supabase project URL (required)
+- `SUPABASE_KEY`: Your Supabase API key (required)
+- `OPENAI_API_KEY`: Your OpenAI API key (required)
+
+### Optional
+- `WEBHOOK_URL`: Your webhook URL (optional, auto-detected if not set)
+- `GOOGLE_CLIENT_ID`: Google OAuth client ID (optional, required for Google Sheets integration)
+- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret (optional, required for Google Sheets integration)
+- `LOG_LEVEL`: Logging level (default: "INFO")
+- `ENVIRONMENT`: Environment name (default: "development")
+
+### LangSmith Tracing (Optional)
+Enable observability and tracing with LangSmith:
+
+- `LANGSMITH_API_KEY`: Your LangSmith API key (optional, for tracing)
+- `LANGSMITH_TRACING`: Set to "true" to enable tracing (default: "false")
+- `LANGSMITH_PROJECT`: Project name in LangSmith (default: "nutri-agent-bot")
+
+**To enable LangSmith tracing:**
+1. Get your API key from [LangSmith](https://smith.langchain.com/)
+2. Add to your `.env` file:
+   ```
+   LANGSMITH_API_KEY=your_api_key_here
+   LANGSMITH_TRACING=true
+   LANGSMITH_PROJECT=nutri-agent-bot
+   ```
+
+When enabled, all agent executions will be automatically traced and visible in your LangSmith dashboard.
 
 ## Code Formatting
 

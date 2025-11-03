@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -40,19 +39,6 @@ def get_sheets_service(credentials: Credentials):
         Resource: Google Sheets API service
     """
     return build("sheets", "v4", credentials=credentials)
-
-
-def get_drive_service(credentials: Credentials):
-    """
-    Build Google Drive API service.
-
-    Args:
-        credentials: Google OAuth credentials
-
-    Returns:
-        Resource: Google Drive API service
-    """
-    return build("drive", "v3", credentials=credentials)
 
 
 async def ensure_valid_credentials(user_id: int, config) -> Credentials:
@@ -287,8 +273,12 @@ async def append_nutritional_data(
 
         logger.info(
             f"Added nutritional data | user_id={user_id} | spreadsheet_id={spreadsheet_id} | "
-            f"calories={calories} | meal_type={meal_type}"
+            f"calories={calories} | meal_type={meal_type} | has_extra_details={bool(extra_details)}"
         )
+        if extra_details:
+            logger.debug(
+                f"Extra details included | length={len(extra_details)} | preview={extra_details[:100]}..."
+            )
 
     except Exception as e:
         logger.error(

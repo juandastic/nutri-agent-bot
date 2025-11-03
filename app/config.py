@@ -29,6 +29,11 @@ class Settings:
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
+    # LangSmith settings
+    LANGSMITH_API_KEY: str | None = os.getenv("LANGSMITH_API_KEY")
+    LANGSMITH_TRACING: str = os.getenv("LANGSMITH_TRACING", "false").lower()
+    LANGSMITH_PROJECT: str | None = os.getenv("LANGSMITH_PROJECT", "nutri-agent-bot")
+
     def validate(self) -> tuple[bool, str | None]:
         """Validate that required settings are present"""
         if not self.TELEGRAM_BOT_TOKEN:

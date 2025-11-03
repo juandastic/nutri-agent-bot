@@ -1,6 +1,7 @@
 """LangChain agent for processing Telegram messages with images and attachments"""
 
 import base64
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
+from langsmith import traceable
 
 from app.config import settings
 from app.tools.spreadsheet_tool import create_register_nutritional_info_tool
@@ -18,6 +20,14 @@ logger = get_logger(__name__)
 
 # Path to the prompt file
 PROMPT_FILE = Path(__file__).parent.parent / "prompts" / "food_analysis_prompt.txt"
+
+# Set LangSmith environment variables if configured
+if settings.LANGSMITH_API_KEY:
+    os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+if settings.LANGSMITH_TRACING == "true":
+    os.environ["LANGSMITH_TRACING"] = "true"
+if settings.LANGSMITH_PROJECT:
+    os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
 
 
 class FoodAnalysisAgent:
@@ -70,6 +80,11 @@ class FoodAnalysisAgent:
 
         return agent
 
+    @traceable(
+        name="FoodAnalysisAgent.analyze",
+        run_type="chain",
+        tags=["food-analysis", "agent"],
+    )
     async def analyze(
         self,
         text: str | None = None,

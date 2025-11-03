@@ -241,13 +241,15 @@ async def get_recent_messages(
 
     Returns:
         List of MessageDict ordered by created_at (oldest first)
+        Returns the most recent N messages in chronological order.
     """
     try:
+        # Get the most recent messages (ordered by created_at desc)
         response = (
             supabase.table("messages")
             .select("*")
             .eq("chat_id", chat_id)
-            .order("created_at", desc=False)
+            .order("created_at", desc=True)
             .limit(limit)
             .execute()
         )
@@ -257,7 +259,10 @@ async def get_recent_messages(
             for msg_data in response.data:
                 messages.append(MessageDict(**msg_data))
 
-        logger.debug(f"Retrieved {len(messages)} messages for chat_id={chat_id}")
+        # Reverse to get chronological order (oldest first) for conversation context
+        messages.reverse()
+
+        logger.debug(f"Retrieved {len(messages)} most recent messages for chat_id={chat_id}")
         return messages
 
     except Exception as e:
