@@ -21,6 +21,10 @@ class Settings:
     # OpenAI settings
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 
+    # Google OAuth settings
+    GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+
     # Logging settings
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")

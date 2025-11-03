@@ -47,13 +47,16 @@ class MessageHandler:
         self.telegram_service = TelegramService()
         self.food_agent = FoodAnalysisAgent()
 
-    async def process_message(self, update: dict[str, Any]) -> None:
+    async def process_message(
+        self, update: dict[str, Any], redirect_uri: str | None = None
+    ) -> None:
         """
         Process an incoming Telegram message update.
         Handles both text messages and photo messages.
 
         Args:
             update: Telegram update JSON payload
+            redirect_uri: OAuth redirect URI (optional, for dynamic URL generation)
         """
         try:
             if "message" not in update:
@@ -167,7 +170,13 @@ class MessageHandler:
             )
 
             # Generate response using agent with conversation history
-            response_text = await self._generate_response(message, combined_text, history_for_agent)
+            response_text = await self._generate_response(
+                message,
+                combined_text,
+                history_for_agent,
+                user["id"],
+                redirect_uri,
+            )
 
             # Save bot response to database (bot responses are always text)
             await create_message(
@@ -206,6 +215,8 @@ class MessageHandler:
         message: dict[str, Any],
         combined_text: str,
         conversation_history: list[dict[str, str]] | None = None,
+        user_id: int | None = None,
+        redirect_uri: str | None = None,
     ) -> str:
         """
         Generate a response for the incoming message using the food analysis agent.
@@ -214,6 +225,8 @@ class MessageHandler:
             message: Telegram message object
             combined_text: Combined text from message text and caption
             conversation_history: Previous conversation messages for context
+            user_id: Internal user ID (from database)
+            redirect_uri: OAuth redirect URI (optional)
 
         Returns:
             str: Response text to send back
@@ -307,6 +320,8 @@ class MessageHandler:
                 text=text_input,
                 images=images if images else None,
                 conversation_history=conversation_history,
+                user_id=user_id,
+                redirect_uri=redirect_uri,
             )
 
             return response_text

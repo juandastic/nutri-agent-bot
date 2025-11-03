@@ -47,6 +47,34 @@ def _get_webhook_url_from_request(request: Request) -> str:
     return webhook_url
 
 
+def _get_redirect_uri_from_request(request: Request) -> str:
+    """
+    Dynamically construct OAuth redirect URI from request headers.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        str: OAuth redirect URI
+    """
+    scheme = request.url.scheme
+    host = request.headers.get("host") or request.headers.get("x-forwarded-host")
+
+    if not host:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot determine redirect URI from request headers. "
+                "Make sure you're calling this endpoint via the public URL (e.g., ngrok URL)."
+            ),
+        )
+
+    base_url = f"{scheme}://{host}"
+    redirect_uri = f"{base_url}/auth/google/callback"
+
+    return redirect_uri
+
+
 @router.post("/setup-webhook", response_model=WebhookSetupResponse)
 async def setup_webhook(request: Request):
     """
@@ -148,7 +176,21 @@ async def webhook_handler(request: Request):
         update_id = update.get("update_id")
 
         logger.info(f"Webhook received | update_id={update_id}")
-        await message_handler.process_message(update)
+
+        # Get redirect URI dynamically from request
+        try:
+            redirect_uri = _get_redirect_uri_from_request(request)
+        except HTTPException:
+            logger.error("Cannot determine redirect URI from request headers")
+            return JSONResponse(
+                content={
+                    "ok": False,
+                    "error": "Server configuration error: Cannot determine redirect URI",
+                },
+                status_code=200,
+            )
+
+        await message_handler.process_message(update, redirect_uri=redirect_uri)
 
         logger.info(f"Webhook processed successfully | update_id={update_id}")
         return JSONResponse(content={"ok": True}, status_code=200)

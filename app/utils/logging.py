@@ -81,12 +81,20 @@ def setup_logging(log_level: str | None = None) -> None:
     error_file_handler.setFormatter(file_format)
     root_logger.addHandler(error_file_handler)
 
-    # Set levels for third-party libraries
+    # Set levels for third-party libraries - silence noisy ones
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.http2").setLevel(logging.WARNING)
+    logging.getLogger("hpack").setLevel(logging.WARNING)
+    logging.getLogger("hpack.hpack").setLevel(logging.WARNING)
+    logging.getLogger("hpack.table").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("google").setLevel(logging.WARNING)
+    logging.getLogger("googleapiclient").setLevel(logging.WARNING)
 
     # Application logger
     app_logger = logging.getLogger("app")

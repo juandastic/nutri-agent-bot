@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from app.routers.auth import router as auth_router
 from app.routers.webhook import router as webhook_router
 from app.utils.logging import get_logger, setup_logging
 
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(webhook_router)
+    app.include_router(auth_router)
 
     # Root endpoint
     @app.get("/")

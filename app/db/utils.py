@@ -44,6 +44,18 @@ class MessageDict(TypedDict):
     updated_at: str | None
 
 
+class SpreadsheetConfigDict(TypedDict):
+    """Spreadsheet configuration data structure"""
+
+    id: int
+    user_id: int
+    spreadsheet_id: str | None
+    oauth_token: str
+    refresh_token: str
+    created_at: str
+    updated_at: str
+
+
 async def get_or_create_user(
     telegram_user_id: int,
     username: str | None,
@@ -251,6 +263,143 @@ async def get_recent_messages(
     except Exception as e:
         logger.error(
             f"Error in get_recent_messages | chat_id={chat_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def get_spreadsheet_config(user_id: int) -> SpreadsheetConfigDict | None:
+    """
+    Get spreadsheet configuration for a user.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        SpreadsheetConfigDict if found, None otherwise
+    """
+    try:
+        response = (
+            supabase.table("spreadsheet_configs").select("*").eq("user_id", user_id).execute()
+        )
+
+        if response.data and len(response.data) > 0:
+            config_data = response.data[0]
+            logger.debug(f"Spreadsheet config found | user_id={user_id}")
+            return SpreadsheetConfigDict(**config_data)
+
+        logger.debug(f"No spreadsheet config found | user_id={user_id}")
+        return None
+
+    except Exception as e:
+        logger.error(
+            f"Error in get_spreadsheet_config | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def save_spreadsheet_config(
+    user_id: int,
+    spreadsheet_id: str | None,
+    oauth_token: str,
+    refresh_token: str,
+) -> SpreadsheetConfigDict:
+    """
+    Save or update spreadsheet configuration for a user.
+
+    Args:
+        user_id: User ID
+        spreadsheet_id: Google Spreadsheet ID (optional)
+        oauth_token: OAuth access token
+        refresh_token: OAuth refresh token
+
+    Returns:
+        SpreadsheetConfigDict: Saved configuration data
+    """
+    try:
+        # Check if config exists
+        existing_config = await get_spreadsheet_config(user_id)
+
+        if existing_config:
+            logger.info(f"Updating spreadsheet config | user_id={user_id}")
+            update_data = {
+                "spreadsheet_id": spreadsheet_id,
+                "oauth_token": oauth_token,
+                "refresh_token": refresh_token,
+                "updated_at": datetime.now().isoformat(),
+            }
+            update_response = (
+                supabase.table("spreadsheet_configs")
+                .update(update_data)
+                .eq("user_id", user_id)
+                .execute()
+            )
+
+            if not update_response.data:
+                raise ValueError("Failed to update spreadsheet config")
+
+            config_data = update_response.data[0]
+            logger.info(f"Spreadsheet config updated | user_id={user_id}")
+            return SpreadsheetConfigDict(**config_data)
+        else:
+            logger.info(f"Creating spreadsheet config | user_id={user_id}")
+            insert_data = {
+                "user_id": user_id,
+                "spreadsheet_id": spreadsheet_id,
+                "oauth_token": oauth_token,
+                "refresh_token": refresh_token,
+            }
+            insert_response = supabase.table("spreadsheet_configs").insert(insert_data).execute()
+
+            if not insert_response.data:
+                raise ValueError("Failed to create spreadsheet config")
+
+            config_data = insert_response.data[0]
+            logger.info(f"Spreadsheet config created | user_id={user_id}")
+            return SpreadsheetConfigDict(**config_data)
+
+    except Exception as e:
+        logger.error(
+            f"Error in save_spreadsheet_config | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def update_spreadsheet_config(user_id: int, **kwargs) -> SpreadsheetConfigDict:
+    """
+    Update specific fields in spreadsheet configuration.
+
+    Args:
+        user_id: User ID
+        **kwargs: Fields to update (spreadsheet_id, oauth_token, refresh_token)
+
+    Returns:
+        SpreadsheetConfigDict: Updated configuration data
+    """
+    try:
+        logger.info(
+            f"Updating spreadsheet config fields | user_id={user_id} | fields={list(kwargs.keys())}"
+        )
+        update_data = {**kwargs, "updated_at": datetime.now().isoformat()}
+        update_response = (
+            supabase.table("spreadsheet_configs")
+            .update(update_data)
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if not update_response.data:
+            raise ValueError("Failed to update spreadsheet config")
+
+        config_data = update_response.data[0]
+        logger.info(f"Spreadsheet config updated | user_id={user_id}")
+        return SpreadsheetConfigDict(**config_data)
+
+    except Exception as e:
+        logger.error(
+            f"Error in update_spreadsheet_config | user_id={user_id} | error={str(e)}",
             exc_info=True,
         )
         raise
