@@ -4,17 +4,21 @@ import httpx
 
 from app.config import settings
 
+# HTTP timeout configuration (connection: 10s, read: 30s)
+HTTP_TIMEOUT = httpx.Timeout(10.0, read=30.0)
+
 
 class TelegramService:
     """Service for Telegram Bot API interactions"""
 
     @staticmethod
-    async def set_webhook(webhook_url: str) -> dict:
+    async def set_webhook(webhook_url: str, secret_token: str | None = None) -> dict:
         """
         Set webhook for Telegram bot.
 
         Args:
             webhook_url: The URL where Telegram should send updates
+            secret_token: Optional secret token to validate webhook requests
 
         Returns:
             dict: Telegram API response
@@ -24,8 +28,12 @@ class TelegramService:
         """
         url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/setWebhook"
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json={"url": webhook_url})
+        payload = {"url": webhook_url}
+        if secret_token:
+            payload["secret_token"] = secret_token
+
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
             response.raise_for_status()
             return response.json()
 
@@ -42,7 +50,7 @@ class TelegramService:
         """
         url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/deleteWebhook"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.post(url)
             response.raise_for_status()
             return response.json()
@@ -67,7 +75,7 @@ class TelegramService:
 
         payload = {"chat_id": chat_id, "text": text, **kwargs}
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             return response.json()
@@ -88,7 +96,7 @@ class TelegramService:
         """
         url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/getFile"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.post(url, json={"file_id": file_id})
             response.raise_for_status()
             return response.json()
@@ -109,7 +117,7 @@ class TelegramService:
         """
         file_url = f"https://api.telegram.org/file/bot{settings.TELEGRAM_BOT_TOKEN}/{file_path}"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.get(file_url)
             response.raise_for_status()
             return response.content

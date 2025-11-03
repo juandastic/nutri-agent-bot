@@ -11,6 +11,7 @@ class Settings:
 
     TELEGRAM_BOT_TOKEN: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
     WEBHOOK_URL: str | None = os.getenv("WEBHOOK_URL")
+    TELEGRAM_WEBHOOK_SECRET: str | None = os.getenv("TELEGRAM_WEBHOOK_SECRET")
     TELEGRAM_API_BASE: str = "https://api.telegram.org/bot"
 
     # Supabase settings

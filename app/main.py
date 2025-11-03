@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from app.config import settings
 from app.routers.auth import router as auth_router
 from app.routers.webhook import router as webhook_router
 from app.utils.logging import get_logger, setup_logging
@@ -14,6 +15,12 @@ logger = get_logger(__name__)
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application"""
+    # Validate required configuration at startup
+    is_valid, error_msg = settings.validate()
+    if not is_valid:
+        logger.error(f"Application startup failed | validation_error={error_msg}")
+        raise ValueError(f"Configuration error: {error_msg}")
+
     app = FastAPI(
         title="Telegram Bot Webhook API",
         description="A FastAPI application for managing a Telegram bot using webhooks",

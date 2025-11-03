@@ -189,19 +189,21 @@ class MessageHandler:
             )
             logger.debug("Bot response saved")
 
-            # Try sending with Markdown, fallback to plain text if it fails
+            # Send message with Markdown formatting
             try:
                 await self.telegram_service.send_message(
                     chat_id=chat_id, text=response_text, parse_mode="Markdown"
                 )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to send message with Markdown, falling back to plain text | error={str(e)}"
+                logger.info(
+                    f"Response sent successfully | chat_id={chat_id} | response_length={len(response_text)}"
                 )
-                # Fallback to plain text if Markdown parsing fails
-                await self.telegram_service.send_message(chat_id=chat_id, text=response_text)
-
-            logger.info(f"Response sent | chat_id={chat_id} | response_length={len(response_text)}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to send message | chat_id={chat_id} | error={str(e)}",
+                    exc_info=True,
+                )
+                # Re-raise the error so it can be handled by outer exception handler
+                raise
 
         except Exception as e:
             logger.error(

@@ -96,9 +96,10 @@ async def setup_webhook(request: Request):
 
     try:
         webhook_url = _get_webhook_url_from_request(request)
-        logger.info(f"Setting webhook | url={webhook_url}")
+        secret_token = settings.TELEGRAM_WEBHOOK_SECRET
+        logger.info(f"Setting webhook | url={webhook_url} | has_secret_token={bool(secret_token)}")
 
-        result = await telegram_service.set_webhook(webhook_url)
+        result = await telegram_service.set_webhook(webhook_url, secret_token=secret_token)
 
         if result.get("ok"):
             logger.info(f"Webhook set successfully | url={webhook_url}")
@@ -162,6 +163,16 @@ async def webhook_handler(request: Request):
     Receive Telegram updates via webhook.
     Processes incoming messages and responds with "Hello World".
     """
+    # Validate webhook secret token if configured
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        secret_token_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret_token_header != settings.TELEGRAM_WEBHOOK_SECRET:
+            logger.warning("Webhook request rejected | invalid_secret_token")
+            return JSONResponse(
+                content={"ok": False, "error": "Forbidden"},
+                status_code=403,
+            )
+
     is_valid, error_msg = settings.validate()
     if not is_valid:
         logger.error(f"Webhook handler configuration error | error={error_msg}")
