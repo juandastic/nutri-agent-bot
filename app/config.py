@@ -18,6 +18,9 @@ class Settings:
     SUPABASE_KEY: str | None = os.getenv("SUPABASE_KEY")
     SUPABASE_DB_URL: str | None = os.getenv("SUPABASE_DB_URL")
 
+    # OpenAI settings
+    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+
     # Logging settings
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
@@ -30,6 +33,8 @@ class Settings:
             return False, "SUPABASE_URL environment variable is not set"
         if not self.SUPABASE_KEY:
             return False, "SUPABASE_KEY environment variable is not set"
+        if not self.OPENAI_API_KEY:
+            return False, "OPENAI_API_KEY environment variable is not set"
         return True, None
 
 

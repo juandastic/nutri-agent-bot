@@ -71,3 +71,45 @@ class TelegramService:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             return response.json()
+
+    @staticmethod
+    async def get_file_path(file_id: str) -> dict:
+        """
+        Get file path from Telegram Bot API.
+
+        Args:
+            file_id: The file ID from Telegram message
+
+        Returns:
+            dict: Telegram API response with file_path
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/getFile"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json={"file_id": file_id})
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
+    async def download_file(file_path: str) -> bytes:
+        """
+        Download a file from Telegram.
+
+        Args:
+            file_path: The file path from getFile API response
+
+        Returns:
+            bytes: The file content as bytes
+
+        Raises:
+            httpx.HTTPStatusError: If download fails
+        """
+        file_url = f"https://api.telegram.org/file/bot{settings.TELEGRAM_BOT_TOKEN}/{file_path}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(file_url)
+            response.raise_for_status()
+            return response.content

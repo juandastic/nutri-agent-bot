@@ -1,11 +1,22 @@
-# Database Schema
+-- Database Schema
+-- This file contains the SQL schema for reference.
+-- To apply migrations, use Supabase Dashboard or run SQL directly.
+-- WARNING: This will drop all existing tables and recreate them!
 
-This file contains the SQL schema for reference. To apply migrations, use Supabase Dashboard or run SQL directly.
+-- ============================================================================
+-- Drop existing tables (in reverse dependency order)
+-- ============================================================================
 
-## Tables
+DROP TABLE IF EXISTS spreadsheet_configs;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS users;
 
-### users
-```sql
+-- ============================================================================
+-- Create tables
+-- ============================================================================
+
+-- users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     telegram_user_id INTEGER UNIQUE NOT NULL,
@@ -15,10 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
-```
 
-### chats
-```sql
+-- chats table
 CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
     telegram_chat_id INTEGER UNIQUE NOT NULL,
@@ -30,26 +39,27 @@ CREATE TABLE IF NOT EXISTS chats (
 
 CREATE INDEX IF NOT EXISTS idx_chats_telegram_chat_id ON chats(telegram_chat_id);
 CREATE INDEX IF NOT EXISTS idx_chat_user_id ON chats(user_id);
-```
 
-### messages
-```sql
+-- messages table
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id),
-    telegram_message_id INTEGER NOT NULL,
+    telegram_message_id INTEGER,
     text TEXT,
-    from_user_id INTEGER NOT NULL REFERENCES users(id),
+    role VARCHAR NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'bot')),
+    message_type VARCHAR NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'photo', 'document')),
+    from_user_id INTEGER REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX IF NOT EXISTS idx_message_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_message_from_user_id ON messages(from_user_id);
-```
+CREATE INDEX IF NOT EXISTS idx_message_role ON messages(role);
+CREATE INDEX IF NOT EXISTS idx_message_created_at ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_message_type ON messages(message_type);
 
-### spreadsheet_configs
-```sql
+-- spreadsheet_configs table
 CREATE TABLE IF NOT EXISTS spreadsheet_configs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
@@ -61,17 +71,16 @@ CREATE TABLE IF NOT EXISTS spreadsheet_configs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spreadsheet_configs_user_id ON spreadsheet_configs(user_id);
-```
 
-## How to Apply Migrations
-
-1. **Via Supabase Dashboard**: Go to SQL Editor and run the SQL
-2. **Via Supabase CLI**: `supabase db push`
-3. **Via psql**: Connect directly and run SQL
-
-## Notes
-
-- All timestamps use `TIMESTAMP WITH TIME ZONE` for proper timezone handling
-- Foreign keys ensure referential integrity
-- Indexes improve query performance
-
+-- ============================================================================
+-- Notes
+-- ============================================================================
+-- All timestamps use TIMESTAMP WITH TIME ZONE for proper timezone handling
+-- Foreign keys ensure referential integrity
+-- Indexes improve query performance
+-- The role field distinguishes between user messages and bot responses
+-- Bot messages have from_user_id as NULL and role as 'bot'
+-- The message_type field indicates content type:
+--   - 'text': Plain text message
+--   - 'photo': Photo (check text field for caption)
+--   - 'document': Document file (check text field for caption)

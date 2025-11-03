@@ -35,9 +35,11 @@ class MessageDict(TypedDict):
 
     id: int
     chat_id: int
-    telegram_message_id: int
+    telegram_message_id: int | None
     text: str | None
-    from_user_id: int
+    role: str
+    message_type: str
+    from_user_id: int | None
     created_at: str
     updated_at: str | None
 
@@ -162,31 +164,37 @@ async def get_or_create_chat(
 
 async def create_message(
     chat_id: int,
-    telegram_message_id: int,
     text: str | None,
-    from_user_id: int,
+    role: str = "user",
+    message_type: str = "text",
+    telegram_message_id: int | None = None,
+    from_user_id: int | None = None,
 ) -> MessageDict:
     """
     Create a new message record using Supabase SDK.
 
     Args:
         chat_id: Chat ID
-        telegram_message_id: Telegram message ID
         text: Message text content
-        from_user_id: User ID who sent the message
+        role: Message role ('user' or 'bot')
+        message_type: Message type ('text', 'photo', 'document')
+        telegram_message_id: Telegram message ID (optional, None for bot messages)
+        from_user_id: User ID who sent the message (None for bot messages)
 
     Returns:
         MessageDict: Message data dictionary
     """
     try:
         logger.debug(
-            f"Creating message | chat_id={chat_id} | telegram_message_id={telegram_message_id} | "
-            f"from_user_id={from_user_id}"
+            f"Creating message | chat_id={chat_id} | role={role} | message_type={message_type} | "
+            f"telegram_message_id={telegram_message_id} | from_user_id={from_user_id}"
         )
         insert_data = {
             "chat_id": chat_id,
-            "telegram_message_id": telegram_message_id,
             "text": text,
+            "role": role,
+            "message_type": message_type,
+            "telegram_message_id": telegram_message_id,
             "from_user_id": from_user_id,
         }
         insert_response = supabase.table("messages").insert(insert_data).execute()
@@ -195,12 +203,54 @@ async def create_message(
             raise ValueError("Failed to create message")
 
         message_data = insert_response.data[0]
-        logger.debug(f"Message created | message_id={message_data['id']}")
+        logger.debug(
+            f"Message created | message_id={message_data['id']} | role={role} | message_type={message_type}"
+        )
         return MessageDict(**message_data)
 
     except Exception as e:
         logger.error(
             f"Error in create_message | chat_id={chat_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def get_recent_messages(
+    chat_id: int,
+    limit: int = 10,
+) -> list[MessageDict]:
+    """
+    Get recent messages from a chat for conversation context.
+
+    Args:
+        chat_id: Chat ID
+        limit: Maximum number of messages to retrieve (default: 10)
+
+    Returns:
+        List of MessageDict ordered by created_at (oldest first)
+    """
+    try:
+        response = (
+            supabase.table("messages")
+            .select("*")
+            .eq("chat_id", chat_id)
+            .order("created_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+
+        messages = []
+        if response.data:
+            for msg_data in response.data:
+                messages.append(MessageDict(**msg_data))
+
+        logger.debug(f"Retrieved {len(messages)} messages for chat_id={chat_id}")
+        return messages
+
+    except Exception as e:
+        logger.error(
+            f"Error in get_recent_messages | chat_id={chat_id} | error={str(e)}",
             exc_info=True,
         )
         raise
