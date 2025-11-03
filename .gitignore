@@ -138,4 +138,5 @@ dmypy.json
 *.log
 .env.local
 .env.*.local
+logs/
 

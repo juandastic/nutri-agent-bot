@@ -10,10 +10,13 @@ from app.config import settings
 from app.models.schemas import WebhookDeleteResponse, WebhookSetupResponse
 from app.services.message_handler import MessageHandler
 from app.services.telegram_service import TelegramService
+from app.utils.logging import get_logger
 
 router = APIRouter(tags=["webhook"])
 telegram_service = TelegramService()
 message_handler = MessageHandler()
+
+logger = get_logger(__name__)
 
 
 def _get_webhook_url_from_request(request: Request) -> str:
@@ -38,7 +41,6 @@ def _get_webhook_url_from_request(request: Request) -> str:
             ),
         )
 
-    # Construct webhook URL
     base_url = f"{scheme}://{host}"
     webhook_url = urljoin(base_url, "/webhook")
 
@@ -58,17 +60,20 @@ async def setup_webhook(request: Request):
         curl -X POST https://your-ngrok-url.ngrok.io/setup-webhook
         # Sets webhook to: https://your-ngrok-url.ngrok.io/webhook
     """
+    logger.info("Webhook setup requested")
     is_valid, error_msg = settings.validate()
     if not is_valid:
+        logger.error(f"Webhook setup failed | validation_error={error_msg}")
         raise HTTPException(status_code=400, detail=error_msg)
 
     try:
-        # Auto-detect webhook URL from request
         webhook_url = _get_webhook_url_from_request(request)
+        logger.info(f"Setting webhook | url={webhook_url}")
 
         result = await telegram_service.set_webhook(webhook_url)
 
         if result.get("ok"):
+            logger.info(f"Webhook set successfully | url={webhook_url}")
             return WebhookSetupResponse(
                 success=True,
                 message="Webhook set successfully",
@@ -76,13 +81,16 @@ async def setup_webhook(request: Request):
                 webhook_url=webhook_url,
             )
         else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Telegram API error: {result.get('description', 'Unknown error')}",
-            )
+            error_desc = result.get("description", "Unknown error")
+            logger.error(f"Telegram API error | description={error_desc}")
+            raise HTTPException(status_code=400, detail=f"Telegram API error: {error_desc}")
     except httpx.HTTPStatusError as e:
+        logger.error(
+            f"HTTP error setting webhook | status={e.response.status_code} | error={str(e)}"
+        )
         raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error: {str(e)}")
     except Exception as e:
+        logger.error(f"Unexpected error setting webhook | error={str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
@@ -92,25 +100,31 @@ async def delete_webhook():
     Delete webhook for Telegram bot.
     Reads TELEGRAM_BOT_TOKEN from environment variable.
     """
+    logger.info("Webhook deletion requested")
     is_valid, error_msg = settings.validate()
     if not is_valid:
+        logger.error(f"Webhook deletion failed | validation_error={error_msg}")
         raise HTTPException(status_code=400, detail=error_msg)
 
     try:
         result = await telegram_service.delete_webhook()
 
         if result.get("ok"):
+            logger.info("Webhook deleted successfully")
             return WebhookDeleteResponse(
                 success=True, message="Webhook deleted successfully", telegram_response=result
             )
         else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Telegram API error: {result.get('description', 'Unknown error')}",
-            )
+            error_desc = result.get("description", "Unknown error")
+            logger.error(f"Telegram API error | description={error_desc}")
+            raise HTTPException(status_code=400, detail=f"Telegram API error: {error_desc}")
     except httpx.HTTPStatusError as e:
+        logger.error(
+            f"HTTP error deleting webhook | status={e.response.status_code} | error={str(e)}"
+        )
         raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error: {str(e)}")
     except Exception as e:
+        logger.error(f"Unexpected error deleting webhook | error={str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
@@ -122,18 +136,26 @@ async def webhook_handler(request: Request):
     """
     is_valid, error_msg = settings.validate()
     if not is_valid:
-        raise HTTPException(status_code=500, detail=error_msg)
+        logger.error(f"Webhook handler configuration error | error={error_msg}")
+        return JSONResponse(
+            content={"ok": False, "error": "Server configuration error"},
+            status_code=200,
+        )
 
+    update_id = None
     try:
         update = await request.json()
+        update_id = update.get("update_id")
 
-        # Process the message
+        logger.info(f"Webhook received | update_id={update_id}")
         await message_handler.process_message(update)
 
-        # Always return 200 OK to acknowledge receipt
+        logger.info(f"Webhook processed successfully | update_id={update_id}")
         return JSONResponse(content={"ok": True}, status_code=200)
 
     except Exception as e:
-        # Still return 200 OK even if there's an error processing
-        # Telegram will retry if we don't acknowledge
+        logger.error(
+            f"Error processing webhook | update_id={update_id} | error={str(e)}",
+            exc_info=True,
+        )
         return JSONResponse(content={"ok": False, "error": str(e)}, status_code=200)

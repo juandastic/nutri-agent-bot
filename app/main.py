@@ -3,6 +3,12 @@
 from fastapi import FastAPI
 
 from app.routers.webhook import router as webhook_router
+from app.utils.logging import get_logger, setup_logging
+
+# Initialize logging before creating app
+setup_logging()
+
+logger = get_logger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -22,6 +28,7 @@ def create_app() -> FastAPI:
         """Root endpoint for health check"""
         return {"message": "Telegram Bot Webhook API is running"}
 
+    logger.info("FastAPI application initialized")
     return app
 
 

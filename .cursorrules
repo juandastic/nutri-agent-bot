@@ -17,3 +17,10 @@ Run: `ruff format . && ruff check --fix .`
 - Remove trailing whitespace
 - Use consistent indentation (4 spaces)
 
+## Virtual Environment Usage
+- This project uses a virtual environment located at `./venv`
+- Always use `./venv/bin/python` instead of `python` or `python3` when running Python commands
+- Always use `./venv/bin/pip` instead of `pip` or `pip3` when installing packages
+- Always use `./venv/bin/alembic` instead of `alembic` when running migrations
+- Example: `./venv/bin/python -c "import app.config"` instead of `python3 -c "import app.config"`
+
