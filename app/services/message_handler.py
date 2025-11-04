@@ -9,8 +9,9 @@ from app.db.utils import (
     get_or_create_chat,
     get_or_create_user,
     get_recent_messages,
-    reset_user_account,
 )
+from app.services.command_handler import CommandHandler
+from app.services.media_handler import MediaHandler
 from app.services.telegram_service import TelegramService
 from app.utils.logging import get_logger
 
@@ -48,6 +49,223 @@ class MessageHandler:
     def __init__(self):
         self.telegram_service = TelegramService()
         self.food_agent = FoodAnalysisAgent()
+        self.command_handler = CommandHandler(self.telegram_service)
+        self.media_handler = MediaHandler(self.telegram_service)
+
+    def _validate_update(self, update: dict[str, Any]) -> bool:
+        """
+        Validate that the update contains a message.
+
+        Args:
+            update: Telegram update JSON payload
+
+        Returns:
+            bool: True if update is valid, False otherwise
+        """
+        if "message" not in update:
+            logger.debug("Update does not contain a message, skipping")
+            return False
+        return True
+
+    def _extract_message_data(
+        self, update: dict[str, Any]
+    ) -> tuple[dict[str, Any], int, int, str | None] | None:
+        """
+        Extract and validate message data from update.
+
+        Args:
+            update: Telegram update JSON payload
+
+        Returns:
+            tuple containing (message, telegram_chat_id, telegram_message_id, chat_type) or None if invalid
+        """
+        message = update["message"]
+        telegram_message_id = message.get("message_id")
+
+        chat_info = message.get("chat")
+        if not chat_info or "id" not in chat_info:
+            logger.warning("Message missing 'chat' or 'chat.id' field, skipping")
+            return None
+
+        telegram_chat_id: int = chat_info["id"]
+        chat_type = chat_info.get("type")
+
+        return message, telegram_chat_id, telegram_message_id, chat_type
+
+    def _extract_user_info(
+        self, message: dict[str, Any]
+    ) -> tuple[int, str | None, str | None] | None:
+        """
+        Extract user information from message.
+
+        Args:
+            message: Telegram message object
+
+        Returns:
+            tuple containing (telegram_user_id, username, first_name) or None if invalid
+        """
+        from_user = message.get("from")
+        if not from_user or "id" not in from_user:
+            logger.warning("Message missing 'from' user or 'id' field, skipping")
+            return None
+
+        telegram_user_id: int = from_user["id"]
+        username = from_user.get("username")
+        first_name = from_user.get("first_name")
+
+        return telegram_user_id, username, first_name
+
+    def _extract_content(
+        self, message: dict[str, Any]
+    ) -> tuple[str, list, dict[str, Any] | None, str]:
+        """
+        Extract content from message (text, photos, documents, caption).
+
+        Args:
+            message: Telegram message object
+
+        Returns:
+            tuple containing (message_text, photos, document, caption)
+        """
+        message_text = message.get("text", "")
+        photos = message.get("photo", [])
+        document = message.get("document")
+        caption = message.get("caption", "")
+
+        return message_text, photos, document, caption
+
+    async def _ensure_user_and_chat(
+        self,
+        telegram_user_id: int,
+        username: str | None,
+        first_name: str | None,
+        telegram_chat_id: int,
+        chat_type: str | None,
+    ) -> tuple[dict, dict]:
+        """
+        Ensure user and chat exist in database, create if necessary.
+
+        Args:
+            telegram_user_id: Telegram user ID
+            username: Telegram username
+            first_name: Telegram first name
+            telegram_chat_id: Telegram chat ID
+            chat_type: Chat type (private, group, supergroup)
+
+        Returns:
+            tuple containing (user dict, chat dict)
+        """
+        user = await get_or_create_user(
+            telegram_user_id=telegram_user_id,
+            username=username,
+            first_name=first_name,
+        )
+
+        logger.info(
+            f"User processed | user_id={user['id']} | telegram_user_id={telegram_user_id} | "
+            f"username={username}"
+        )
+
+        chat_user_id = None if chat_type in ("group", "supergroup") else user["id"]
+
+        chat = await get_or_create_chat(
+            telegram_chat_id=telegram_chat_id,
+            user_id=chat_user_id,
+            chat_type=chat_type,
+        )
+
+        logger.info(
+            f"Chat processed | chat_id={chat['id']} | telegram_chat_id={telegram_chat_id} | "
+            f"chat_type={chat_type}"
+        )
+
+        return user, chat
+
+    def _prepare_conversation_history(
+        self, conversation_history: list[dict]
+    ) -> list[dict[str, str]]:
+        """
+        Prepare conversation history for agent.
+
+        Args:
+            conversation_history: List of message dictionaries from database
+
+        Returns:
+            List of formatted messages for agent
+        """
+        return [
+            {"role": msg["role"], "text": msg["text"] or ""}
+            for msg in conversation_history
+            if msg["text"]  # Only include messages with text
+        ]
+
+    async def _save_user_message(
+        self,
+        chat_id: int,
+        combined_text: str | None,
+        message_type: str,
+        telegram_message_id: int | None,
+        user_id: int,
+    ) -> None:
+        """
+        Save user message to database.
+
+        Args:
+            chat_id: Internal chat ID
+            combined_text: Combined text from message text and caption
+            message_type: Message type (text, photo, document)
+            telegram_message_id: Telegram message ID
+            user_id: Internal user ID
+        """
+        await create_message(
+            chat_id=chat_id,
+            text=combined_text if combined_text else None,
+            role="user",
+            message_type=message_type,
+            telegram_message_id=telegram_message_id,
+            from_user_id=user_id,
+        )
+        logger.debug(
+            f"User message saved | telegram_message_id={telegram_message_id} | message_type={message_type}"
+        )
+
+    async def _save_and_send_bot_response(
+        self, chat_id: int, response_text: str, telegram_chat_id: int
+    ) -> None:
+        """
+        Save bot response to database and send it via Telegram.
+
+        Args:
+            chat_id: Internal chat ID
+            response_text: Response text to send
+            telegram_chat_id: Telegram chat ID for sending message
+        """
+        # Save bot response to database (bot responses are always text)
+        await create_message(
+            chat_id=chat_id,
+            text=response_text,
+            role="bot",
+            message_type="text",
+            telegram_message_id=None,  # Bot messages don't have Telegram IDs
+            from_user_id=None,  # Bot messages don't have a user_id
+        )
+        logger.debug("Bot response saved")
+
+        # Send message with Markdown formatting
+        try:
+            await self.telegram_service.send_message(
+                chat_id=telegram_chat_id, text=response_text, parse_mode="Markdown"
+            )
+            logger.info(
+                f"Response sent successfully | chat_id={telegram_chat_id} | response_length={len(response_text)}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to send message | chat_id={telegram_chat_id} | error={str(e)}",
+                exc_info=True,
+            )
+            # Re-raise the error so it can be handled by outer exception handler
+            raise
 
     async def _send_typing_action(self, chat_id: int) -> None:
         """
@@ -101,39 +319,29 @@ class MessageHandler:
             redirect_uri: OAuth redirect URI (optional, for dynamic URL generation)
         """
         try:
-            if "message" not in update:
-                logger.debug("Update does not contain a message, skipping")
+            # Validate update
+            if not self._validate_update(update):
                 return
 
-            message = update["message"]
-            telegram_message_id = message.get("message_id")
-
-            chat_info = message.get("chat")
-            if not chat_info or "id" not in chat_info:
-                logger.warning("Message missing 'chat' or 'chat.id' field, skipping")
+            # Extract message data
+            message_data = self._extract_message_data(update)
+            if not message_data:
                 return
 
-            telegram_chat_id: int = chat_info["id"]
-            chat_id = telegram_chat_id
-            chat_type = chat_info.get("type")
+            message, telegram_chat_id, telegram_message_id, chat_type = message_data
 
             # Send typing action at the beginning to show we're processing
-            await self._send_typing_action(chat_id=chat_id)
+            await self._send_typing_action(chat_id=telegram_chat_id)
 
-            from_user = message.get("from")
-            if not from_user or "id" not in from_user:
-                logger.warning("Message missing 'from' user or 'id' field, skipping")
+            # Extract user info
+            user_info = self._extract_user_info(message)
+            if not user_info:
                 return
 
-            telegram_user_id: int = from_user["id"]
-            username = from_user.get("username")
-            first_name = from_user.get("first_name")
+            telegram_user_id, username, first_name = user_info
 
-            # Extract text, photos, and documents
-            message_text = message.get("text", "")
-            photos = message.get("photo", [])
-            document = message.get("document")
-            caption = message.get("caption", "")
+            # Extract content
+            message_text, photos, document, caption = self._extract_content(message)
 
             # Handle commands (only for text messages in private chats)
             # Exclude /start so it can be handled by the agent for better welcome messages
@@ -143,7 +351,7 @@ class MessageHandler:
                 and chat_type == "private"
                 and message_text.split()[0].lower() != "/start"
             ):
-                await self._handle_command(
+                await self.command_handler.handle_command(
                     message_text=message_text,
                     telegram_chat_id=telegram_chat_id,
                     telegram_user_id=telegram_user_id,
@@ -153,11 +361,7 @@ class MessageHandler:
                 return
 
             # Combine text and caption
-            combined_text = ""
-            if message_text:
-                combined_text = message_text
-            elif caption:
-                combined_text = caption
+            combined_text = message_text if message_text else caption
 
             # Check if we have text, photos, documents, or both
             has_text = bool(combined_text)
@@ -169,7 +373,7 @@ class MessageHandler:
                 return
 
             logger.debug(
-                f"Processing message | chat_id={chat_id} | message_id={telegram_message_id} | "
+                f"Processing message | chat_id={telegram_chat_id} | message_id={telegram_message_id} | "
                 f"has_text={has_text} | has_photos={has_photos} | has_document={has_document}"
             )
 
@@ -178,38 +382,18 @@ class MessageHandler:
                 f"username={username} | chat_type={chat_type}"
             )
 
-            user = await get_or_create_user(
+            # Ensure user and chat exist
+            user, chat = await self._ensure_user_and_chat(
                 telegram_user_id=telegram_user_id,
                 username=username,
                 first_name=first_name,
-            )
-
-            logger.info(
-                f"User processed | user_id={user['id']} | telegram_user_id={telegram_user_id} | "
-                f"username={username}"
-            )
-
-            chat_user_id = None if chat_type in ("group", "supergroup") else user["id"]
-
-            chat = await get_or_create_chat(
                 telegram_chat_id=telegram_chat_id,
-                user_id=chat_user_id,
                 chat_type=chat_type,
-            )
-
-            logger.info(
-                f"Chat processed | chat_id={chat['id']} | telegram_chat_id={telegram_chat_id} | "
-                f"chat_type={chat_type}"
             )
 
             # Get conversation history BEFORE saving current message (to exclude it)
             conversation_history = await get_recent_messages(chat_id=chat["id"], limit=10)
-            # Convert to format expected by agent
-            history_for_agent = [
-                {"role": msg["role"], "text": msg["text"] or ""}
-                for msg in conversation_history
-                if msg["text"]  # Only include messages with text
-            ]
+            history_for_agent = self._prepare_conversation_history(conversation_history)
 
             # Determine message type
             message_type = determine_message_type(
@@ -219,57 +403,33 @@ class MessageHandler:
             )
 
             # Store user message in database
-            await create_message(
+            await self._save_user_message(
                 chat_id=chat["id"],
-                text=combined_text if combined_text else None,
-                role="user",
+                combined_text=combined_text if combined_text else None,
                 message_type=message_type,
                 telegram_message_id=telegram_message_id,
-                from_user_id=user["id"],
-            )
-            logger.debug(
-                f"User message saved | telegram_message_id={telegram_message_id} | message_type={message_type}"
+                user_id=user["id"],
             )
 
             # Send typing action before generating response
-            await self._send_typing_action(chat_id=chat_id)
+            await self._send_typing_action(chat_id=telegram_chat_id)
 
             # Generate response using agent with conversation history
             response_text = await self._generate_response(
                 message,
                 combined_text,
-                chat_id,
+                telegram_chat_id,
                 history_for_agent,
                 user["id"],
                 redirect_uri,
             )
 
-            # Save bot response to database (bot responses are always text)
-            await create_message(
+            # Save bot response and send it
+            await self._save_and_send_bot_response(
                 chat_id=chat["id"],
-                text=response_text,
-                role="bot",
-                message_type="text",
-                telegram_message_id=None,  # Bot messages don't have Telegram IDs
-                from_user_id=None,  # Bot messages don't have a user_id
+                response_text=response_text,
+                telegram_chat_id=telegram_chat_id,
             )
-            logger.debug("Bot response saved")
-
-            # Send message with Markdown formatting
-            try:
-                await self.telegram_service.send_message(
-                    chat_id=chat_id, text=response_text, parse_mode="Markdown"
-                )
-                logger.info(
-                    f"Response sent successfully | chat_id={chat_id} | response_length={len(response_text)}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to send message | chat_id={chat_id} | error={str(e)}",
-                    exc_info=True,
-                )
-                # Re-raise the error so it can be handled by outer exception handler
-                raise
 
         except Exception as e:
             logger.error(
@@ -304,85 +464,15 @@ class MessageHandler:
         try:
             photos = message.get("photo", [])
             document = message.get("document")
-            images: list[bytes] = []
 
-            # Download photos if present
-            if photos:
-                logger.debug(f"Downloading {len(photos)} photo(s)")
-                # Download all photos (or just the largest one if there are multiple)
-                # For simplicity, we'll use the largest photo (last in array)
-                largest_photo = photos[-1]
-                file_id = largest_photo.get("file_id")
+            # Download all media using MediaHandler
+            images, error_message = await self.media_handler.download_all_media(
+                photos, document, combined_text
+            )
 
-                if file_id:
-                    try:
-                        # Get file path
-                        file_info = await self.telegram_service.get_file_path(file_id)
-                        if file_info.get("ok"):
-                            file_path = file_info.get("result", {}).get("file_path")
-                            if file_path:
-                                # Download image
-                                image_bytes = await self.telegram_service.download_file(file_path)
-                                images.append(image_bytes)
-                                logger.debug(
-                                    f"Downloaded image | file_id={file_id} | size={len(image_bytes)}"
-                                )
-                    except Exception as e:
-                        logger.error(
-                            f"Error downloading image | file_id={file_id} | error={str(e)}"
-                        )
-
-            # Download document if present and it's an image
-            if document:
-                file_id = document.get("file_id")
-                mime_type = document.get("mime_type", "")
-                file_name = document.get("file_name", "")
-
-                # Check if it's an image file
-                is_image = mime_type.startswith("image/") or file_name.lower().endswith(
-                    (".jpg", ".jpeg", ".png", ".gif", ".webp")
-                )
-
-                if is_image and file_id:
-                    logger.debug(
-                        f"Downloading document image | file_id={file_id} | mime_type={mime_type}"
-                    )
-                    try:
-                        # Get file path
-                        file_info = await self.telegram_service.get_file_path(file_id)
-                        if file_info.get("ok"):
-                            file_path = file_info.get("result", {}).get("file_path")
-                            if file_path:
-                                # Download image
-                                image_bytes = await self.telegram_service.download_file(file_path)
-                                images.append(image_bytes)
-                                logger.debug(
-                                    f"Downloaded document image | file_id={file_id} | size={len(image_bytes)}"
-                                )
-                    except Exception as e:
-                        logger.error(
-                            f"Error downloading document image | file_id={file_id} | error={str(e)}"
-                        )
-                elif is_image and not file_id:
-                    logger.warning(
-                        f"Image document missing file_id | mime_type={mime_type} | file_name={file_name}"
-                    )
-                    # If no text provided and no images downloaded, return error message
-                    if not combined_text and not images:
-                        return (
-                            "I received an image document but couldn't process it. "
-                            "Please try sending the image again or send it as a photo."
-                        )
-                elif not is_image:
-                    logger.debug(
-                        f"Document is not an image | mime_type={mime_type} | file_name={file_name}"
-                    )
-                    # If document is not an image and no text provided, return a helpful message
-                    if not combined_text and not images:
-                        return (
-                            "I can only analyze images of food. Please send me a photo or image file "
-                            "(JPEG, PNG, GIF, or WEBP) of the food you'd like me to analyze."
-                        )
+            # If there's an error message and no text/content, return error
+            if error_message and not combined_text and not images:
+                return error_message
 
             # Prepare text input
             text_input = combined_text if combined_text else None
@@ -408,80 +498,6 @@ class MessageHandler:
         except Exception as e:
             logger.error(f"Error generating response | error={str(e)}", exc_info=True)
             return "I apologize, but I encountered an error while analyzing your food. Please try again."
-
-    async def _handle_command(
-        self,
-        message_text: str,
-        telegram_chat_id: int,
-        telegram_user_id: int,
-        username: str | None,
-        first_name: str | None,
-    ) -> None:
-        """
-        Handle bot commands.
-
-        Args:
-            message_text: The command text (e.g., "/reset_account")
-            telegram_chat_id: Telegram chat ID
-            telegram_user_id: Telegram user ID
-            username: Telegram username
-            first_name: Telegram first name
-        """
-        try:
-            # Get or create user to get internal user_id
-            user = await get_or_create_user(
-                telegram_user_id=telegram_user_id,
-                username=username,
-                first_name=first_name,
-            )
-            user_id = user["id"]
-
-            command = message_text.split()[0].lower()  # Get command without arguments
-
-            if command == "/reset_account":
-                logger.info(f"Reset account command received | user_id={user_id}")
-                try:
-                    result = await reset_user_account(user_id)
-                    response = (
-                        "✅ Account reset completed successfully!\n\n"
-                        f"• Messages deleted: {result['messages_deleted']}\n"
-                        f"• Chats deleted: {result['chats_deleted']}\n"
-                        f"• Configuration deleted: {result['config_deleted']}\n\n"
-                        "You can now start fresh and configure your account again."
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error resetting account | user_id={user_id} | error={str(e)}",
-                        exc_info=True,
-                    )
-                    response = (
-                        "❌ An error occurred while resetting your account. "
-                        "Please try again later or contact support."
-                    )
-            else:
-                # Unknown command
-                response = (
-                    f"Unknown command: {command}\n\n"
-                    "Available commands:\n"
-                    "• /start - Start chatting with the bot\n"
-                    "• /reset_account - Reset your account data (messages, chats, configuration)"
-                )
-
-            await self.telegram_service.send_message(chat_id=telegram_chat_id, text=response)
-            logger.info(f"Command response sent | command={command} | user_id={user_id}")
-
-        except Exception as e:
-            logger.error(
-                f"Error handling command | command={message_text} | error={str(e)}",
-                exc_info=True,
-            )
-            try:
-                await self.telegram_service.send_message(
-                    chat_id=telegram_chat_id,
-                    text="❌ An error occurred while processing your command. Please try again later.",
-                )
-            except Exception:
-                pass  # If we can't send error message, log it and continue
 
     async def process_with_attachments(self, update: dict[str, Any]) -> None:
         """
