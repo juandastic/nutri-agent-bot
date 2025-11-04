@@ -1,5 +1,6 @@
 """Message handler service for processing Telegram updates"""
 
+import asyncio
 from typing import Any
 
 from app.agents.langchain_agent import FoodAnalysisAgent
@@ -48,6 +49,46 @@ class MessageHandler:
         self.telegram_service = TelegramService()
         self.food_agent = FoodAnalysisAgent()
 
+    async def _send_typing_action(self, chat_id: int) -> None:
+        """
+        Send typing action to indicate bot is processing.
+        Silently handles errors to not interrupt the main flow.
+
+        Args:
+            chat_id: The chat ID to send the action to
+        """
+        try:
+            await self.telegram_service.send_chat_action(chat_id=chat_id, action="typing")
+        except Exception as e:
+            logger.debug(f"Failed to send typing action | chat_id={chat_id} | error={str(e)}")
+            # Silently fail - typing action is not critical
+
+    async def _keep_typing_alive(
+        self, chat_id: int, task: asyncio.Task, interval_seconds: float = 4.0
+    ) -> None:
+        """
+        Keep typing action alive by sending it periodically while a task is running.
+        Telegram typing actions expire after ~5 seconds, so we refresh them every 4 seconds.
+
+        Args:
+            chat_id: The chat ID to send the action to
+            task: The asyncio task to wait for
+            interval_seconds: Interval between typing actions (default 4 seconds)
+        """
+        # Send initial typing action
+        await self._send_typing_action(chat_id=chat_id)
+
+        # Keep sending typing actions every interval_seconds until task completes
+        while not task.done():
+            try:
+                # Wait for either the task to complete or the interval to pass
+                await asyncio.wait_for(asyncio.shield(task), timeout=interval_seconds)
+                break  # Task completed
+            except asyncio.TimeoutError:
+                # Task still running, send another typing action
+                await self._send_typing_action(chat_id=chat_id)
+                continue
+
     async def process_message(
         self, update: dict[str, Any], redirect_uri: str | None = None
     ) -> None:
@@ -75,6 +116,9 @@ class MessageHandler:
             telegram_chat_id: int = chat_info["id"]
             chat_id = telegram_chat_id
             chat_type = chat_info.get("type")
+
+            # Send typing action at the beginning to show we're processing
+            await self._send_typing_action(chat_id=chat_id)
 
             from_user = message.get("from")
             if not from_user or "id" not in from_user:
@@ -187,10 +231,14 @@ class MessageHandler:
                 f"User message saved | telegram_message_id={telegram_message_id} | message_type={message_type}"
             )
 
+            # Send typing action before generating response
+            await self._send_typing_action(chat_id=chat_id)
+
             # Generate response using agent with conversation history
             response_text = await self._generate_response(
                 message,
                 combined_text,
+                chat_id,
                 history_for_agent,
                 user["id"],
                 redirect_uri,
@@ -234,6 +282,7 @@ class MessageHandler:
         self,
         message: dict[str, Any],
         combined_text: str,
+        chat_id: int,
         conversation_history: list[dict[str, str]] | None = None,
         user_id: int | None = None,
         redirect_uri: str | None = None,
@@ -244,6 +293,7 @@ class MessageHandler:
         Args:
             message: Telegram message object
             combined_text: Combined text from message text and caption
+            chat_id: Telegram chat ID (required for sending typing action)
             conversation_history: Previous conversation messages for context
             user_id: Internal user ID (from database)
             redirect_uri: OAuth redirect URI (optional)
@@ -334,15 +384,24 @@ class MessageHandler:
                             "(JPEG, PNG, GIF, or WEBP) of the food you'd like me to analyze."
                         )
 
-            # Use agent to analyze with conversation history
+            # Prepare text input
             text_input = combined_text if combined_text else None
-            response_text = await self.food_agent.analyze(
-                text=text_input,
-                images=images if images else None,
-                conversation_history=conversation_history,
-                user_id=user_id,
-                redirect_uri=redirect_uri,
+
+            # Send typing action before calling the agent (this is usually the longest operation)
+            # Start the agent analysis task
+            analyze_task = asyncio.create_task(
+                self.food_agent.analyze(
+                    text=text_input,
+                    images=images if images else None,
+                    conversation_history=conversation_history,
+                    user_id=user_id,
+                    redirect_uri=redirect_uri,
+                )
             )
+            # Keep typing action alive during the analysis
+            await self._keep_typing_alive(chat_id=chat_id, task=analyze_task)
+            # Get the result
+            response_text = await analyze_task
 
             return response_text
 

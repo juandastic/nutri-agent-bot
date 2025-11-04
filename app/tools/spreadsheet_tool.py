@@ -79,7 +79,7 @@ def create_register_nutritional_info_tool(user_id: int, redirect_uri: str | None
             # User is authorized, register the data
             logger.info(f"Registering nutritional data | user_id={user_id} | calories={calories}")
 
-            await append_nutritional_data(
+            spreadsheet_id = await append_nutritional_data(
                 user_id=user_id,
                 calories=calories,
                 proteins=proteins,
@@ -89,6 +89,13 @@ def create_register_nutritional_info_tool(user_id: int, redirect_uri: str | None
                 extra_details=extra_details,
             )
 
+            # Generate spreadsheet link
+            spreadsheet_link = (
+                f"\n\n📊 View your spreadsheet: https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+                if spreadsheet_id
+                else ""
+            )
+
             return (
                 f"Successfully registered your meal information!\n"
                 f"Calories: {calories}\n"
@@ -96,7 +103,7 @@ def create_register_nutritional_info_tool(user_id: int, redirect_uri: str | None
                 f"Carbs: {carbs}g\n"
                 f"Fats: {fats}g\n"
                 f"Meal Type: {meal_type}\n"
-                f"The data has been saved to your Google Sheet."
+                f"The data has been saved to your Google Sheet.{spreadsheet_link}"
             )
 
         except Exception as e:

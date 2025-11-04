@@ -229,7 +229,7 @@ async def append_nutritional_data(
     fats: float,
     meal_type: str,
     extra_details: str | None = None,
-) -> None:
+) -> str:
     """
     Append nutritional data to user's spreadsheet.
 
@@ -241,6 +241,9 @@ async def append_nutritional_data(
         fats: Fats value (g)
         meal_type: Meal type (e.g., Breakfast, Lunch, Dinner, Snack)
         extra_details: Extra details or description (optional)
+
+    Returns:
+        str: Spreadsheet ID where the data was saved
     """
     try:
         spreadsheet_id, credentials = await ensure_spreadsheet_exists(user_id)
@@ -279,6 +282,8 @@ async def append_nutritional_data(
             logger.debug(
                 f"Extra details included | length={len(extra_details)} | preview={extra_details[:100]}..."
             )
+
+        return spreadsheet_id
 
     except Exception as e:
         logger.error(

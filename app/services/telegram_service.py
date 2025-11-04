@@ -144,3 +144,27 @@ class TelegramService:
             response = await client.get(file_url)
             response.raise_for_status()
             return response.content
+
+    @staticmethod
+    async def send_chat_action(chat_id: int, action: str) -> dict:
+        """
+        Send a chat action to indicate that the bot is processing a message.
+
+        Args:
+            chat_id: The chat ID to send the action to
+            action: The action type (e.g., 'typing', 'upload_photo', 'record_video')
+
+        Returns:
+            dict: Telegram API response
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/sendChatAction"
+
+        payload = {"chat_id": chat_id, "action": action}
+
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
