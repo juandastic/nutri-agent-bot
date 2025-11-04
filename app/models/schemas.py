@@ -30,3 +30,11 @@ class TelegramUpdate(BaseModel):
     edited_message: dict[str, Any] | None = None
     channel_post: dict[str, Any] | None = None
     # Add other update types as needed
+
+
+class CommandsSetupResponse(BaseModel):
+    """Response model for bot commands setup"""
+
+    success: bool
+    message: str
+    telegram_response: dict[str, Any] | None = None

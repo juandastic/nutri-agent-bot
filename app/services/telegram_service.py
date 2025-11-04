@@ -56,6 +56,29 @@ class TelegramService:
             return response.json()
 
     @staticmethod
+    async def set_my_commands(commands: list[dict[str, str]]) -> dict:
+        """
+        Set bot commands to be displayed in the command menu.
+
+        Args:
+            commands: List of command dictionaries with 'command' and 'description' keys
+
+        Returns:
+            dict: Telegram API response
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/setMyCommands"
+
+        payload = {"commands": commands}
+
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
     async def send_message(chat_id: int, text: str, **kwargs) -> dict:
         """
         Send a message to a Telegram chat.

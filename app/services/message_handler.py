@@ -8,6 +8,7 @@ from app.db.utils import (
     get_or_create_chat,
     get_or_create_user,
     get_recent_messages,
+    reset_user_account,
 )
 from app.services.telegram_service import TelegramService
 from app.utils.logging import get_logger
@@ -89,6 +90,23 @@ class MessageHandler:
             photos = message.get("photo", [])
             document = message.get("document")
             caption = message.get("caption", "")
+
+            # Handle commands (only for text messages in private chats)
+            # Exclude /start so it can be handled by the agent for better welcome messages
+            if (
+                message_text
+                and message_text.startswith("/")
+                and chat_type == "private"
+                and message_text.split()[0].lower() != "/start"
+            ):
+                await self._handle_command(
+                    message_text=message_text,
+                    telegram_chat_id=telegram_chat_id,
+                    telegram_user_id=telegram_user_id,
+                    username=username,
+                    first_name=first_name,
+                )
+                return
 
             # Combine text and caption
             combined_text = ""
@@ -331,6 +349,80 @@ class MessageHandler:
         except Exception as e:
             logger.error(f"Error generating response | error={str(e)}", exc_info=True)
             return "I apologize, but I encountered an error while analyzing your food. Please try again."
+
+    async def _handle_command(
+        self,
+        message_text: str,
+        telegram_chat_id: int,
+        telegram_user_id: int,
+        username: str | None,
+        first_name: str | None,
+    ) -> None:
+        """
+        Handle bot commands.
+
+        Args:
+            message_text: The command text (e.g., "/reset_account")
+            telegram_chat_id: Telegram chat ID
+            telegram_user_id: Telegram user ID
+            username: Telegram username
+            first_name: Telegram first name
+        """
+        try:
+            # Get or create user to get internal user_id
+            user = await get_or_create_user(
+                telegram_user_id=telegram_user_id,
+                username=username,
+                first_name=first_name,
+            )
+            user_id = user["id"]
+
+            command = message_text.split()[0].lower()  # Get command without arguments
+
+            if command == "/reset_account":
+                logger.info(f"Reset account command received | user_id={user_id}")
+                try:
+                    result = await reset_user_account(user_id)
+                    response = (
+                        "✅ Account reset completed successfully!\n\n"
+                        f"• Messages deleted: {result['messages_deleted']}\n"
+                        f"• Chats deleted: {result['chats_deleted']}\n"
+                        f"• Configuration deleted: {result['config_deleted']}\n\n"
+                        "You can now start fresh and configure your account again."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error resetting account | user_id={user_id} | error={str(e)}",
+                        exc_info=True,
+                    )
+                    response = (
+                        "❌ An error occurred while resetting your account. "
+                        "Please try again later or contact support."
+                    )
+            else:
+                # Unknown command
+                response = (
+                    f"Unknown command: {command}\n\n"
+                    "Available commands:\n"
+                    "• /start - Start chatting with the bot\n"
+                    "• /reset_account - Reset your account data (messages, chats, configuration)"
+                )
+
+            await self.telegram_service.send_message(chat_id=telegram_chat_id, text=response)
+            logger.info(f"Command response sent | command={command} | user_id={user_id}")
+
+        except Exception as e:
+            logger.error(
+                f"Error handling command | command={message_text} | error={str(e)}",
+                exc_info=True,
+            )
+            try:
+                await self.telegram_service.send_message(
+                    chat_id=telegram_chat_id,
+                    text="❌ An error occurred while processing your command. Please try again later.",
+                )
+            except Exception:
+                pass  # If we can't send error message, log it and continue
 
     async def process_with_attachments(self, update: dict[str, Any]) -> None:
         """

@@ -273,6 +273,43 @@ async def get_recent_messages(
         raise
 
 
+async def get_user_latest_chat(user_id: int) -> ChatDict | None:
+    """
+    Get the most recent chat for a user.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        ChatDict if found, None otherwise
+    """
+    try:
+        response = (
+            supabase.table("chats")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("last_active_at", desc=True)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data and len(response.data) > 0:
+            chat_data = response.data[0]
+            logger.debug(f"Latest chat found | user_id={user_id} | chat_id={chat_data['id']}")
+            return ChatDict(**chat_data)
+
+        logger.debug(f"No chat found for user | user_id={user_id}")
+        return None
+
+    except Exception as e:
+        logger.error(
+            f"Error in get_user_latest_chat | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
 async def get_spreadsheet_config(user_id: int) -> SpreadsheetConfigDict | None:
     """
     Get spreadsheet configuration for a user.
@@ -367,6 +404,84 @@ async def save_spreadsheet_config(
     except Exception as e:
         logger.error(
             f"Error in save_spreadsheet_config | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def reset_user_account(user_id: int) -> dict[str, int]:
+    """
+    Reset user account by deleting all associated data.
+    Deletes messages, chats, and spreadsheet configuration for the user.
+    The user record itself is NOT deleted.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        dict: Summary of deleted items with counts
+    """
+    try:
+        logger.info(f"Resetting user account | user_id={user_id}")
+
+        # Get all chats for this user first
+        chats_response = supabase.table("chats").select("id").eq("user_id", user_id).execute()
+        chat_ids = [chat["id"] for chat in (chats_response.data or [])]
+
+        # 1. Delete all messages from user's chats OR where user is the sender
+        # Use a single query to delete all related messages efficiently
+        messages_deleted = 0
+        if chat_ids:
+            # Delete messages from user's chats
+            for chat_id in chat_ids:
+                messages_response = (
+                    supabase.table("messages").delete().eq("chat_id", chat_id).execute()
+                )
+                # Supabase returns the deleted rows
+                if messages_response.data:
+                    messages_deleted += len(messages_response.data)
+
+        # Also delete any remaining messages where user is the sender
+        # (in case there are messages in chats not owned by the user)
+        user_messages_response = (
+            supabase.table("messages").delete().eq("from_user_id", user_id).execute()
+        )
+        if user_messages_response.data:
+            messages_deleted += len(user_messages_response.data)
+
+        # 2. Delete all chats for this user
+        chats_deleted = 0
+        if chat_ids:
+            chats_delete_response = (
+                supabase.table("chats").delete().eq("user_id", user_id).execute()
+            )
+            if chats_delete_response.data:
+                chats_deleted = len(chats_delete_response.data)
+
+        # 3. Delete spreadsheet configuration
+        config_deleted = 0
+        config_delete_response = (
+            supabase.table("spreadsheet_configs").delete().eq("user_id", user_id).execute()
+        )
+        if config_delete_response.data:
+            config_deleted = len(config_delete_response.data)
+
+        result = {
+            "messages_deleted": messages_deleted,
+            "chats_deleted": chats_deleted,
+            "config_deleted": config_deleted,
+        }
+
+        logger.info(
+            f"User account reset completed | user_id={user_id} | "
+            f"messages={messages_deleted} | chats={chats_deleted} | config={config_deleted}"
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            f"Error resetting user account | user_id={user_id} | error={str(e)}",
             exc_info=True,
         )
         raise

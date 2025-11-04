@@ -7,7 +7,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.models.schemas import WebhookDeleteResponse, WebhookSetupResponse
+from app.models.schemas import (
+    CommandsSetupResponse,
+    WebhookDeleteResponse,
+    WebhookSetupResponse,
+)
 from app.services.message_handler import MessageHandler
 from app.services.telegram_service import TelegramService
 from app.utils.logging import get_logger
@@ -103,6 +107,29 @@ async def setup_webhook(request: Request):
 
         if result.get("ok"):
             logger.info(f"Webhook set successfully | url={webhook_url}")
+
+            # Register bot commands
+            try:
+                commands = [
+                    {
+                        "command": "reset_account",
+                        "description": "Reset your account data (messages, chats, configuration)",
+                    },
+                ]
+                commands_result = await telegram_service.set_my_commands(commands)
+                if commands_result.get("ok"):
+                    logger.info("Bot commands registered successfully")
+                else:
+                    logger.warning(
+                        f"Failed to register bot commands | description={commands_result.get('description', 'Unknown error')}"
+                    )
+            except Exception as cmd_error:
+                # Don't fail webhook setup if command registration fails
+                logger.warning(
+                    f"Error registering bot commands | error={str(cmd_error)}",
+                    exc_info=True,
+                )
+
             return WebhookSetupResponse(
                 success=True,
                 message="Webhook set successfully",
@@ -154,6 +181,50 @@ async def delete_webhook():
         raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error deleting webhook | error={str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post("/setup-commands", response_model=CommandsSetupResponse)
+async def setup_commands():
+    """
+    Register bot commands to be displayed in the command menu.
+
+    This endpoint registers the available bot commands with Telegram.
+    Users will see these commands when they type "/" in the chat.
+    """
+    logger.info("Bot commands setup requested")
+    is_valid, error_msg = settings.validate()
+    if not is_valid:
+        logger.error(f"Commands setup failed | validation_error={error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
+
+    try:
+        commands = [
+            {
+                "command": "reset_account",
+                "description": "Reset your account data (messages, chats, configuration)",
+            },
+        ]
+        result = await telegram_service.set_my_commands(commands)
+
+        if result.get("ok"):
+            logger.info("Bot commands registered successfully")
+            return CommandsSetupResponse(
+                success=True,
+                message="Bot commands registered successfully",
+                telegram_response=result,
+            )
+        else:
+            error_desc = result.get("description", "Unknown error")
+            logger.error(f"Telegram API error | description={error_desc}")
+            raise HTTPException(status_code=400, detail=f"Telegram API error: {error_desc}")
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f"HTTP error setting commands | status={e.response.status_code} | error={str(e)}"
+        )
+        raise HTTPException(status_code=e.response.status_code, detail=f"HTTP error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error setting commands | error={str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
