@@ -9,10 +9,9 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Scopes required for Google Sheets and Drive
+# Scopes required for Google Sheets
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
 ]
 
 
