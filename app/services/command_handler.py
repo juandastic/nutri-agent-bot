@@ -48,12 +48,15 @@ class CommandHandler:
 
             command = message_text.split()[0].lower()  # Get command without arguments
 
-            if command == "/reset_account":
+            if command == "/start":
+                await self._handle_start(telegram_chat_id)
+            elif command == "/reset_account":
                 response = await self._handle_reset_account(user_id)
+                await self.telegram_service.send_message(chat_id=telegram_chat_id, text=response)
             else:
                 response = self._handle_unknown_command(command)
+                await self.telegram_service.send_message(chat_id=telegram_chat_id, text=response)
 
-            await self.telegram_service.send_message(chat_id=telegram_chat_id, text=response)
             logger.info(f"Command response sent | command={command} | user_id={user_id}")
 
         except Exception as e:
@@ -68,6 +71,40 @@ class CommandHandler:
                 )
             except Exception:
                 pass  # If we can't send error message, log it and continue
+
+    async def _handle_start(self, telegram_chat_id: int) -> None:
+        """
+        Handle /start command.
+        Sends a welcome message in English and asks for language preference.
+
+        Args:
+            telegram_chat_id: Telegram chat ID
+        """
+        logger.info(f"Start command received | chat_id={telegram_chat_id}")
+        welcome_text = (
+            "Welcome to NutriAgentBot! 👋\n\n"
+            "I'm here to help you analyze your food and provide nutritional insights.\n\n"
+            "Please select your preferred language:"
+        )
+
+        await self.telegram_service.send_message(
+            chat_id=telegram_chat_id,
+            text=welcome_text,
+            reply_markup={
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": "English",
+                            "callback_data": "Welcome me in English, explain me how it works",
+                        },
+                        {
+                            "text": "Español",
+                            "callback_data": "Dame la bienvenida en español, explicame como funciona",
+                        },
+                    ]
+                ]
+            },
+        )
 
     async def _handle_reset_account(self, user_id: int) -> str:
         """

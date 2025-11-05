@@ -54,7 +54,7 @@ class MessageHandler:
 
     def _validate_update(self, update: dict[str, Any]) -> bool:
         """
-        Validate that the update contains a message.
+        Validate that the update contains a message or callback_query.
 
         Args:
             update: Telegram update JSON payload
@@ -62,16 +62,69 @@ class MessageHandler:
         Returns:
             bool: True if update is valid, False otherwise
         """
-        if "message" not in update:
-            logger.debug("Update does not contain a message, skipping")
+        if "message" not in update and "callback_query" not in update:
+            logger.debug("Update does not contain a message or callback_query, skipping")
             return False
         return True
+
+    def _extract_callback_query_data(
+        self, update: dict[str, Any]
+    ) -> tuple[dict[str, Any], int, int, str | None] | None:
+        """
+        Extract and convert callback_query data to message-like structure.
+
+        Args:
+            update: Telegram update JSON payload with callback_query
+
+        Returns:
+            tuple containing (message, telegram_chat_id, telegram_message_id, chat_type) or None if invalid
+        """
+        callback_query = update.get("callback_query")
+        if not callback_query:
+            return None
+
+        # Extract user info from callback_query
+        from_user = callback_query.get("from")
+        if not from_user or "id" not in from_user:
+            logger.warning("Callback query missing 'from' user or 'id' field, skipping")
+            return None
+
+        # Extract chat info from the original message
+        original_message = callback_query.get("message", {})
+        chat_info = original_message.get("chat", {})
+        if not chat_info or "id" not in chat_info:
+            logger.warning("Callback query missing 'message.chat' or 'chat.id' field, skipping")
+            return None
+
+        telegram_chat_id: int = chat_info["id"]
+        chat_type = chat_info.get("type")
+
+        # Get original message_id and generate a unique one for the callback
+        original_message_id = original_message.get("message_id")
+        # Generate unique message_id: add prefix (1000000000) to original message_id
+        # This ensures uniqueness in the database while staying within PostgreSQL INTEGER range
+        telegram_message_id = 1000000000 + original_message_id if original_message_id else None
+
+        # Extract callback data (the text the user clicked)
+        callback_data = callback_query.get("data", "")
+
+        # Create a message-like structure using callback_data as text
+        message = {
+            "message_id": telegram_message_id,
+            "from": from_user,
+            "chat": chat_info,
+            "date": original_message.get("date", 0),  # Use original message date
+            "text": callback_data,  # Use callback_data as the message text
+        }
+
+        return message, telegram_chat_id, telegram_message_id, chat_type
 
     def _extract_message_data(
         self, update: dict[str, Any]
     ) -> tuple[dict[str, Any], int, int, str | None] | None:
         """
         Extract and validate message data from update.
+        Handles both regular messages and callback_query updates.
 
         Args:
             update: Telegram update JSON payload
@@ -79,6 +132,11 @@ class MessageHandler:
         Returns:
             tuple containing (message, telegram_chat_id, telegram_message_id, chat_type) or None if invalid
         """
+        # Check if it's a callback_query first
+        if "callback_query" in update:
+            return self._extract_callback_query_data(update)
+
+        # Otherwise, handle as regular message
         message = update["message"]
         telegram_message_id = message.get("message_id")
 
@@ -330,6 +388,20 @@ class MessageHandler:
 
             message, telegram_chat_id, telegram_message_id, chat_type = message_data
 
+            # If this is a callback_query, answer it to remove loading state
+            if "callback_query" in update:
+                callback_query_id = update["callback_query"].get("id")
+                if callback_query_id:
+                    try:
+                        await self.telegram_service.answer_callback_query(
+                            callback_query_id=callback_query_id
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            f"Failed to answer callback query | callback_query_id={callback_query_id} | error={str(e)}"
+                        )
+                        # Continue processing even if answering fails
+
             # Send typing action at the beginning to show we're processing
             await self._send_typing_action(chat_id=telegram_chat_id)
 
@@ -344,13 +416,7 @@ class MessageHandler:
             message_text, photos, document, caption = self._extract_content(message)
 
             # Handle commands (only for text messages in private chats)
-            # Exclude /start so it can be handled by the agent for better welcome messages
-            if (
-                message_text
-                and message_text.startswith("/")
-                and chat_type == "private"
-                and message_text.split()[0].lower() != "/start"
-            ):
+            if message_text and message_text.startswith("/") and chat_type == "private":
                 await self.command_handler.handle_command(
                     message_text=message_text,
                     telegram_chat_id=telegram_chat_id,

@@ -146,6 +146,37 @@ class TelegramService:
             return response.content
 
     @staticmethod
+    async def answer_callback_query(
+        callback_query_id: str, text: str | None = None, show_alert: bool = False
+    ) -> dict:
+        """
+        Answer a callback query from an inline keyboard button.
+
+        Args:
+            callback_query_id: The ID of the callback query to answer
+            text: Optional text to show to the user
+            show_alert: If True, shows an alert instead of a notification
+
+        Returns:
+            dict: Telegram API response
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        url = f"{settings.TELEGRAM_API_BASE}{settings.TELEGRAM_BOT_TOKEN}/answerCallbackQuery"
+
+        payload = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text
+        if show_alert:
+            payload["show_alert"] = show_alert
+
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
     async def send_chat_action(chat_id: int, action: str) -> dict:
         """
         Send a chat action to indicate that the bot is processing a message.

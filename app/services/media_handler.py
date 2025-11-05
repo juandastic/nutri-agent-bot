@@ -35,8 +35,7 @@ class MediaHandler:
         if not photos:
             return images
 
-        logger.debug(f"Downloading {len(photos)} photo(s)")
-        # Download all photos (or just the largest one if there are multiple)
+        logger.debug("Downloading photo")
         # For simplicity, we'll use the largest photo (last in array)
         largest_photo = photos[-1]
         file_id = largest_photo.get("file_id")
