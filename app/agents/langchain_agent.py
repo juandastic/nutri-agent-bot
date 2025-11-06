@@ -114,7 +114,7 @@ class FoodAnalysisAgent:
             )
 
             # Build input text
-            input_text = text if text else "Please analyze this food."
+            input_text = text if text else ""
 
             # Convert conversation history to LangChain format
             chat_history = []
