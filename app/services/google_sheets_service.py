@@ -83,7 +83,7 @@ async def create_spreadsheet(user_id: int, credentials: Credentials) -> str:
     try:
         sheets_service = get_sheets_service(credentials)
 
-        spreadsheet_title = f"Nutritional Log - {datetime.now().strftime('%Y-%m-%d')}"
+        spreadsheet_title = "Nutritional Log"
 
         spreadsheet = {
             "properties": {"title": spreadsheet_title},
