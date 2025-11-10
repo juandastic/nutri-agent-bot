@@ -567,6 +567,64 @@ async def save_nutritional_info(
         raise
 
 
+async def get_nutritional_info(
+    user_id: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[NutritionalInfoDict]:
+    """
+    Get nutritional information for a user with optional date filters.
+
+    Args:
+        user_id: User ID
+        start_date: Start date filter in ISO format (YYYY-MM-DD). If provided, returns records from this date onwards.
+        end_date: End date filter in ISO format (YYYY-MM-DD). If provided, returns records up to this date.
+                  If only end_date is provided, includes records up to end of that day.
+                  If both dates are provided, returns records in the range [start_date, end_date].
+
+    Returns:
+        List of NutritionalInfoDict ordered by created_at (oldest first)
+    """
+    try:
+        logger.info(
+            f"Querying nutritional info | user_id={user_id} | start_date={start_date} | end_date={end_date}"
+        )
+
+        # Start with base query filtered by user_id
+        query = supabase.table("nutritional_info").select("*").eq("user_id", user_id)
+
+        # Apply date filters
+        if start_date:
+            # Include records from start of start_date
+            query = query.gte("created_at", f"{start_date}T00:00:00")
+        if end_date:
+            # Include records up to end of end_date
+            query = query.lte("created_at", f"{end_date}T23:59:59")
+
+        # Order by created_at ascending (oldest first)
+        query = query.order("created_at", desc=False)
+
+        response = query.execute()
+
+        records = []
+        if response.data:
+            for record_data in response.data:
+                records.append(NutritionalInfoDict(**record_data))
+
+        logger.info(
+            f"Retrieved {len(records)} nutritional records | user_id={user_id} | "
+            f"start_date={start_date} | end_date={end_date}"
+        )
+        return records
+
+    except Exception as e:
+        logger.error(
+            f"Error in get_nutritional_info | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
 async def update_spreadsheet_config(user_id: int, **kwargs) -> SpreadsheetConfigDict:
     """
     Update specific fields in spreadsheet configuration.
