@@ -7,6 +7,7 @@
 -- Drop existing tables (in reverse dependency order)
 -- ============================================================================
 
+DROP TABLE IF EXISTS nutritional_info;
 DROP TABLE IF EXISTS spreadsheet_configs;
 DROP TABLE IF EXISTS messages;
 DROP TABLE IF EXISTS chats;
@@ -19,7 +20,7 @@ DROP TABLE IF EXISTS users;
 -- users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    telegram_user_id INTEGER UNIQUE NOT NULL,
+    telegram_user_id NUMERIC UNIQUE,
     username VARCHAR,
     first_name VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -30,7 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id)
 -- chats table
 CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
-    telegram_chat_id INTEGER UNIQUE NOT NULL,
+    telegram_chat_id NUMERIC UNIQUE,
     user_id INTEGER REFERENCES users(id),
     chat_type VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -44,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_user_id ON chats(user_id);
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id),
-    telegram_message_id INTEGER,
+    telegram_message_id NUMERIC,
     text TEXT,
     role VARCHAR NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'bot')),
     message_type VARCHAR NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'photo', 'document')),
@@ -71,6 +72,22 @@ CREATE TABLE IF NOT EXISTS spreadsheet_configs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spreadsheet_configs_user_id ON spreadsheet_configs(user_id);
+
+-- nutritional_info table
+CREATE TABLE IF NOT EXISTS nutritional_info (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    calories NUMERIC NOT NULL,
+    proteins NUMERIC NOT NULL,
+    carbs NUMERIC NOT NULL,
+    fats NUMERIC NOT NULL,
+    meal_type VARCHAR NOT NULL,
+    extra_details TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_nutritional_info_user_id ON nutritional_info(user_id);
+CREATE INDEX IF NOT EXISTS idx_nutritional_info_created_at ON nutritional_info(created_at);
 
 -- ============================================================================
 -- Notes

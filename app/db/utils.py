@@ -56,6 +56,20 @@ class SpreadsheetConfigDict(TypedDict):
     updated_at: str
 
 
+class NutritionalInfoDict(TypedDict):
+    """Nutritional information data structure"""
+
+    id: int
+    user_id: int
+    calories: float
+    proteins: float
+    carbs: float
+    fats: float
+    meal_type: str
+    extra_details: str | None
+    created_at: str
+
+
 async def get_or_create_user(
     telegram_user_id: int,
     username: str | None,
@@ -412,7 +426,7 @@ async def save_spreadsheet_config(
 async def reset_user_account(user_id: int) -> dict[str, int]:
     """
     Reset user account by deleting all associated data.
-    Deletes messages, chats, and spreadsheet configuration for the user.
+    Deletes messages, chats, spreadsheet configuration, and nutritional info for the user.
     The user record itself is NOT deleted.
 
     Args:
@@ -466,15 +480,25 @@ async def reset_user_account(user_id: int) -> dict[str, int]:
         if config_delete_response.data:
             config_deleted = len(config_delete_response.data)
 
+        # 4. Delete nutritional info records
+        nutritional_info_deleted = 0
+        nutritional_info_delete_response = (
+            supabase.table("nutritional_info").delete().eq("user_id", user_id).execute()
+        )
+        if nutritional_info_delete_response.data:
+            nutritional_info_deleted = len(nutritional_info_delete_response.data)
+
         result = {
             "messages_deleted": messages_deleted,
             "chats_deleted": chats_deleted,
             "config_deleted": config_deleted,
+            "nutritional_info_deleted": nutritional_info_deleted,
         }
 
         logger.info(
             f"User account reset completed | user_id={user_id} | "
-            f"messages={messages_deleted} | chats={chats_deleted} | config={config_deleted}"
+            f"messages={messages_deleted} | chats={chats_deleted} | "
+            f"config={config_deleted} | nutritional_info={nutritional_info_deleted}"
         )
 
         return result
@@ -482,6 +506,62 @@ async def reset_user_account(user_id: int) -> dict[str, int]:
     except Exception as e:
         logger.error(
             f"Error resetting user account | user_id={user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def save_nutritional_info(
+    user_id: int,
+    calories: float,
+    proteins: float,
+    carbs: float,
+    fats: float,
+    meal_type: str,
+    extra_details: str | None = None,
+) -> NutritionalInfoDict:
+    """
+    Save nutritional information to the database.
+
+    Args:
+        user_id: User ID
+        calories: Calories value
+        proteins: Proteins value (g)
+        carbs: Carbohydrates value (g)
+        fats: Fats value (g)
+        meal_type: Meal type (e.g., Breakfast, Lunch, Dinner, Snack)
+        extra_details: Extra details or description (optional)
+
+    Returns:
+        NutritionalInfoDict: Saved nutritional information data with generated ID
+    """
+    try:
+        logger.info(
+            f"Saving nutritional info | user_id={user_id} | calories={calories} | meal_type={meal_type}"
+        )
+        insert_data = {
+            "user_id": user_id,
+            "calories": calories,
+            "proteins": proteins,
+            "carbs": carbs,
+            "fats": fats,
+            "meal_type": meal_type,
+            "extra_details": extra_details,
+        }
+        insert_response = supabase.table("nutritional_info").insert(insert_data).execute()
+
+        if not insert_response.data:
+            raise ValueError("Failed to create nutritional info record")
+
+        nutritional_data = insert_response.data[0]
+        logger.info(
+            f"Nutritional info saved | id={nutritional_data['id']} | user_id={user_id} | calories={calories}"
+        )
+        return NutritionalInfoDict(**nutritional_data)
+
+    except Exception as e:
+        logger.error(
+            f"Error in save_nutritional_info | user_id={user_id} | error={str(e)}",
             exc_info=True,
         )
         raise

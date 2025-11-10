@@ -13,7 +13,8 @@ from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from app.config import settings
-from app.tools.spreadsheet_tool import create_register_nutritional_info_tool
+from app.tools.register_google_account_tool import create_register_google_account_tool
+from app.tools.register_nutritional_info_tool import create_register_nutritional_info_tool
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -68,8 +69,11 @@ class FoodAnalysisAgent:
         Returns:
             Runnable: Compiled agent graph
         """
-        # Create tool bound to user_id and redirect_uri
-        bound_tools = [create_register_nutritional_info_tool(user_id, redirect_uri)]
+        # Create tools bound to user_id and redirect_uri
+        bound_tools = [
+            create_register_nutritional_info_tool(user_id),
+            create_register_google_account_tool(user_id, redirect_uri),
+        ]
 
         # Create agent using LangChain 1.0 API
         agent = create_agent(

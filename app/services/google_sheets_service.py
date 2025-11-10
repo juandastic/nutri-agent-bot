@@ -229,6 +229,7 @@ async def append_nutritional_data(
     fats: float,
     meal_type: str,
     extra_details: str | None = None,
+    record_id: int | None = None,
 ) -> str:
     """
     Append nutritional data to user's spreadsheet.
@@ -241,6 +242,7 @@ async def append_nutritional_data(
         fats: Fats value (g)
         meal_type: Meal type (e.g., Breakfast, Lunch, Dinner, Snack)
         extra_details: Extra details or description (optional)
+        record_id: Optional record ID from database to use instead of timestamp
 
     Returns:
         str: Spreadsheet ID where the data was saved
@@ -248,11 +250,12 @@ async def append_nutritional_data(
     try:
         spreadsheet_id, credentials = await ensure_spreadsheet_exists(user_id)
 
-        timestamp = datetime.now().isoformat()
+        # Use record_id if provided, otherwise use timestamp
+        id_value = record_id if record_id is not None else datetime.now().isoformat()
         date_str = datetime.now().strftime("%Y-%m-%d")
 
         row_data = [
-            timestamp,  # Id (TIMESTAMP)
+            id_value,  # Id (from database or timestamp)
             date_str,  # Date
             meal_type,  # Meal Type
             calories,  # Calories
