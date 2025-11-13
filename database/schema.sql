@@ -17,28 +17,26 @@ DROP TABLE IF EXISTS users;
 -- Create tables
 -- ============================================================================
 
--- users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
-    telegram_user_id NUMERIC UNIQUE,
+    external_user_id TEXT UNIQUE,
     username VARCHAR,
     first_name VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_external_user_id ON users(external_user_id);
 
--- chats table
 CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
-    telegram_chat_id NUMERIC UNIQUE,
+    external_chat_id TEXT UNIQUE,
     user_id INTEGER REFERENCES users(id),
     chat_type VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_active_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS idx_chats_telegram_chat_id ON chats(telegram_chat_id);
+CREATE INDEX IF NOT EXISTS idx_chats_external_chat_id ON chats(external_chat_id);
 CREATE INDEX IF NOT EXISTS idx_chat_user_id ON chats(user_id);
 
 -- messages table

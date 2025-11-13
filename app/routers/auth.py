@@ -105,19 +105,28 @@ async def callback(
         # This is optional - if it fails, we still show the success page since OAuth succeeded
         try:
             chat = await get_user_latest_chat(user_id)
-            telegram_chat_id = None
+            chat_id_for_notification = None
             if chat:
-                telegram_chat_id = chat["telegram_chat_id"]
+                external_chat_id = chat.get("external_chat_id")
+                if external_chat_id:
+                    try:
+                        chat_id_for_notification = int(external_chat_id)
+                    except ValueError:
+                        logger.debug(
+                            "Latest chat external ID is not numeric, skipping Telegram notification",
+                        )
 
-            if telegram_chat_id:
+            if chat_id_for_notification:
                 success_message = (
                     "✅ Configuration completed successfully!\n\n"
                     "You can now request to register nutritional information. "
                     "Send a message with the details of your meal and I'll register it in your spreadsheet."
                 )
-                await TelegramService.send_message(chat_id=telegram_chat_id, text=success_message)
+                await TelegramService.send_message(
+                    chat_id=chat_id_for_notification, text=success_message
+                )
                 logger.info(
-                    f"Sent confirmation message to user | user_id={user_id} | chat_id={telegram_chat_id}"
+                    f"Sent confirmation message to user | user_id={user_id} | chat_id={chat_id_for_notification}"
                 )
         except Exception as notification_error:
             # Log error but don't fail the OAuth flow - configuration was successful

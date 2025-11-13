@@ -13,7 +13,7 @@ class UserDict(TypedDict):
     """User data structure"""
 
     id: int
-    telegram_user_id: int
+    external_user_id: str | None
     username: str | None
     first_name: str | None
     created_at: str
@@ -23,7 +23,7 @@ class ChatDict(TypedDict):
     """Chat data structure"""
 
     id: int
-    telegram_chat_id: int
+    external_chat_id: str | None
     user_id: int | None
     chat_type: str | None
     created_at: str
@@ -71,7 +71,7 @@ class NutritionalInfoDict(TypedDict):
 
 
 async def get_or_create_user(
-    telegram_user_id: int,
+    external_user_id: str,
     username: str | None,
     first_name: str | None,
 ) -> UserDict:
@@ -79,30 +79,30 @@ async def get_or_create_user(
     Get existing user or create a new one using Supabase SDK.
 
     Args:
-        telegram_user_id: Telegram user ID
-        username: Telegram username (optional)
-        first_name: Telegram first name (optional)
+        external_user_id: External user ID (may come from Telegram or other frontends)
+        username: User handle or username (optional)
+        first_name: User first name (optional)
 
     Returns:
         UserDict: User data dictionary
     """
     try:
         response = (
-            supabase.table("users").select("*").eq("telegram_user_id", telegram_user_id).execute()
+            supabase.table("users").select("*").eq("external_user_id", external_user_id).execute()
         )
 
         if response.data and len(response.data) > 0:
             user_data = response.data[0]
             logger.debug(
-                f"User found | user_id={user_data['id']} | telegram_user_id={telegram_user_id}"
+                f"User found | user_id={user_data['id']} | external_user_id={external_user_id}"
             )
             return UserDict(**user_data)
 
         logger.info(
-            f"Creating new user | telegram_user_id={telegram_user_id} | username={username}"
+            f"Creating new user | external_user_id={external_user_id} | username={username}"
         )
         insert_data = {
-            "telegram_user_id": telegram_user_id,
+            "external_user_id": external_user_id,
             "username": username,
             "first_name": first_name,
         }
@@ -113,20 +113,20 @@ async def get_or_create_user(
 
         user_data = insert_response.data[0]
         logger.info(
-            f"User created | user_id={user_data['id']} | telegram_user_id={telegram_user_id}"
+            f"User created | user_id={user_data['id']} | external_user_id={external_user_id}"
         )
         return UserDict(**user_data)
 
     except Exception as e:
         logger.error(
-            f"Error in get_or_create_user | telegram_user_id={telegram_user_id} | error={str(e)}",
+            f"Error in get_or_create_user | external_user_id={external_user_id} | error={str(e)}",
             exc_info=True,
         )
         raise
 
 
 async def get_or_create_chat(
-    telegram_chat_id: int,
+    external_chat_id: str,
     user_id: int | None,
     chat_type: str | None,
 ) -> ChatDict:
@@ -134,7 +134,7 @@ async def get_or_create_chat(
     Get existing chat or create a new one using Supabase SDK.
 
     Args:
-        telegram_chat_id: Telegram chat ID
+        external_chat_id: External chat ID (string identifier)
         user_id: User ID (None for group chats)
         chat_type: Chat type ('private', 'group', 'supergroup')
 
@@ -143,7 +143,7 @@ async def get_or_create_chat(
     """
     try:
         response = (
-            supabase.table("chats").select("*").eq("telegram_chat_id", telegram_chat_id).execute()
+            supabase.table("chats").select("*").eq("external_chat_id", external_chat_id).execute()
         )
 
         if response.data and len(response.data) > 0:
@@ -156,15 +156,15 @@ async def get_or_create_chat(
             )
             chat_data = update_response.data[0]
             logger.debug(
-                f"Chat updated | chat_id={chat_data['id']} | telegram_chat_id={telegram_chat_id}"
+                f"Chat updated | chat_id={chat_data['id']} | external_chat_id={external_chat_id}"
             )
             return ChatDict(**chat_data)
 
         logger.info(
-            f"Creating new chat | telegram_chat_id={telegram_chat_id} | chat_type={chat_type}"
+            f"Creating new chat | external_chat_id={external_chat_id} | chat_type={chat_type}"
         )
         insert_data = {
-            "telegram_chat_id": telegram_chat_id,
+            "external_chat_id": external_chat_id,
             "user_id": user_id,
             "chat_type": chat_type,
             "last_active_at": datetime.now().isoformat(),
@@ -176,13 +176,13 @@ async def get_or_create_chat(
 
         chat_data = insert_response.data[0]
         logger.info(
-            f"Chat created | chat_id={chat_data['id']} | telegram_chat_id={telegram_chat_id}"
+            f"Chat created | chat_id={chat_data['id']} | external_chat_id={external_chat_id}"
         )
         return ChatDict(**chat_data)
 
     except Exception as e:
         logger.error(
-            f"Error in get_or_create_chat | telegram_chat_id={telegram_chat_id} | error={str(e)}",
+            f"Error in get_or_create_chat | external_chat_id={external_chat_id} | error={str(e)}",
             exc_info=True,
         )
         raise

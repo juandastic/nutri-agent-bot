@@ -38,3 +38,15 @@ class CommandsSetupResponse(BaseModel):
     success: bool
     message: str
     telegram_response: dict[str, Any] | None = None
+
+
+class ExternalAgentResponse(BaseModel):
+    """Response model for external agent interactions"""
+
+    success: bool
+    response_text: str
+    user_id: int
+    chat_id: int
+    external_chat_id: str
+    bot_message_id: int
+    timestamp: str

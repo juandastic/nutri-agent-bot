@@ -23,7 +23,7 @@ class CommandHandler:
         self,
         message_text: str,
         telegram_chat_id: int,
-        telegram_user_id: int,
+        external_user_id: str,
         username: str | None,
         first_name: str | None,
     ) -> None:
@@ -33,14 +33,14 @@ class CommandHandler:
         Args:
             message_text: The command text (e.g., "/reset_account")
             telegram_chat_id: Telegram chat ID
-            telegram_user_id: Telegram user ID
+            external_user_id: External user ID
             username: Telegram username
             first_name: Telegram first name
         """
         try:
             # Get or create user to get internal user_id
             user = await get_or_create_user(
-                telegram_user_id=telegram_user_id,
+                external_user_id=external_user_id,
                 username=username,
                 first_name=first_name,
             )

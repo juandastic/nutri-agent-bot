@@ -152,7 +152,7 @@ class MessageHandler:
 
     def _extract_user_info(
         self, message: dict[str, Any]
-    ) -> tuple[int, str | None, str | None] | None:
+    ) -> tuple[str, str | None, str | None] | None:
         """
         Extract user information from message.
 
@@ -160,18 +160,18 @@ class MessageHandler:
             message: Telegram message object
 
         Returns:
-            tuple containing (telegram_user_id, username, first_name) or None if invalid
+            tuple containing (external_user_id, username, first_name) or None if invalid
         """
         from_user = message.get("from")
         if not from_user or "id" not in from_user:
             logger.warning("Message missing 'from' user or 'id' field, skipping")
             return None
 
-        telegram_user_id: int = from_user["id"]
+        external_user_id = str(from_user["id"])
         username = from_user.get("username")
         first_name = from_user.get("first_name")
 
-        return telegram_user_id, username, first_name
+        return external_user_id, username, first_name
 
     def _extract_content(
         self, message: dict[str, Any]
@@ -194,17 +194,17 @@ class MessageHandler:
 
     async def _ensure_user_and_chat(
         self,
-        telegram_user_id: int,
+        external_user_id: str,
         username: str | None,
         first_name: str | None,
-        telegram_chat_id: int,
+        external_chat_id: str,
         chat_type: str | None,
     ) -> tuple[dict, dict]:
         """
         Ensure user and chat exist in database, create if necessary.
 
         Args:
-            telegram_user_id: Telegram user ID
+            external_user_id: External user ID
             username: Telegram username
             first_name: Telegram first name
             telegram_chat_id: Telegram chat ID
@@ -214,26 +214,26 @@ class MessageHandler:
             tuple containing (user dict, chat dict)
         """
         user = await get_or_create_user(
-            telegram_user_id=telegram_user_id,
+            external_user_id=external_user_id,
             username=username,
             first_name=first_name,
         )
 
         logger.info(
-            f"User processed | user_id={user['id']} | telegram_user_id={telegram_user_id} | "
+            f"User processed | user_id={user['id']} | external_user_id={external_user_id} | "
             f"username={username}"
         )
 
         chat_user_id = None if chat_type in ("group", "supergroup") else user["id"]
 
         chat = await get_or_create_chat(
-            telegram_chat_id=telegram_chat_id,
+            external_chat_id=external_chat_id,
             user_id=chat_user_id,
             chat_type=chat_type,
         )
 
         logger.info(
-            f"Chat processed | chat_id={chat['id']} | telegram_chat_id={telegram_chat_id} | "
+            f"Chat processed | chat_id={chat['id']} | external_chat_id={external_chat_id} | "
             f"chat_type={chat_type}"
         )
 
@@ -410,7 +410,8 @@ class MessageHandler:
             if not user_info:
                 return
 
-            telegram_user_id, username, first_name = user_info
+            external_user_id, username, first_name = user_info
+            external_chat_id = str(telegram_chat_id)
 
             # Extract content
             message_text, photos, document, caption = self._extract_content(message)
@@ -420,7 +421,7 @@ class MessageHandler:
                 await self.command_handler.handle_command(
                     message_text=message_text,
                     telegram_chat_id=telegram_chat_id,
-                    telegram_user_id=telegram_user_id,
+                    external_user_id=external_user_id,
                     username=username,
                     first_name=first_name,
                 )
@@ -444,16 +445,16 @@ class MessageHandler:
             )
 
             logger.debug(
-                f"Extracted user info | telegram_user_id={telegram_user_id} | "
+                f"Extracted user info | external_user_id={external_user_id} | "
                 f"username={username} | chat_type={chat_type}"
             )
 
             # Ensure user and chat exist
             user, chat = await self._ensure_user_and_chat(
-                telegram_user_id=telegram_user_id,
+                external_user_id=external_user_id,
                 username=username,
                 first_name=first_name,
-                telegram_chat_id=telegram_chat_id,
+                external_chat_id=external_chat_id,
                 chat_type=chat_type,
             )
 
