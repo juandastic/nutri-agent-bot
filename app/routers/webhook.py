@@ -15,6 +15,7 @@ from app.models.schemas import (
 from app.services.message_handler import MessageHandler
 from app.services.telegram_service import TelegramService
 from app.utils.logging import get_logger
+from app.utils.request_helpers import get_redirect_uri_from_request
 
 router = APIRouter(tags=["webhook"])
 telegram_service = TelegramService()
@@ -49,34 +50,6 @@ def _get_webhook_url_from_request(request: Request) -> str:
     webhook_url = urljoin(base_url, "/webhook")
 
     return webhook_url
-
-
-def _get_redirect_uri_from_request(request: Request) -> str:
-    """
-    Dynamically construct OAuth redirect URI from request headers.
-
-    Args:
-        request: FastAPI Request object
-
-    Returns:
-        str: OAuth redirect URI
-    """
-    scheme = request.url.scheme
-    host = request.headers.get("host") or request.headers.get("x-forwarded-host")
-
-    if not host:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot determine redirect URI from request headers. "
-                "Make sure you're calling this endpoint via the public URL (e.g., ngrok URL)."
-            ),
-        )
-
-    base_url = f"{scheme}://{host}"
-    redirect_uri = f"{base_url}/auth/google/callback"
-
-    return redirect_uri
 
 
 @router.post("/setup-webhook", response_model=WebhookSetupResponse)
@@ -261,7 +234,7 @@ async def webhook_handler(request: Request):
 
         # Get redirect URI dynamically from request
         try:
-            redirect_uri = _get_redirect_uri_from_request(request)
+            redirect_uri = get_redirect_uri_from_request(request)
         except HTTPException:
             logger.error("Cannot determine redirect URI from request headers")
             return JSONResponse(

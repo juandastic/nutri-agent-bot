@@ -123,6 +123,7 @@ class ExternalAgentService:
         external_chat_id: str | None,
         username: str | None,
         name: str | None,
+        redirect_uri: str | None,
         message_text: str | None,
         image_files: Iterable[bytes] | None,
     ) -> dict[str, int | str]:
@@ -134,6 +135,7 @@ class ExternalAgentService:
             external_chat_id: Optional chat identifier. When omitted, a general chat is used.
             username: Optional username for first-time user registration.
             name: Optional name for first-time user registration.
+            redirect_uri: Optional OAuth redirect URI for external flows.
             message_text: Optional textual message content.
             image_files: Optional iterable of raw image bytes.
 
@@ -148,6 +150,9 @@ class ExternalAgentService:
         has_images = bool(images)
         sanitized_username = username.strip() if username and username.strip() else None
         sanitized_name = name.strip() if name and name.strip() else None
+        sanitized_redirect_uri = (
+            redirect_uri.strip() if redirect_uri and redirect_uri.strip() else None
+        )
 
         if not has_text and not has_images:
             raise ValueError("Message must include text or at least one image")
@@ -181,7 +186,7 @@ class ExternalAgentService:
             images=images if images else None,
             conversation_history=history_for_agent,
             user_id=user["id"],
-            redirect_uri=None,
+            redirect_uri=sanitized_redirect_uri,
         )
 
         bot_message = await self._store_bot_message(chat_id=chat["id"], response_text=response_text)

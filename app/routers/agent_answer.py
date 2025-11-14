@@ -1,10 +1,11 @@
 """Router exposing endpoints for external frontends to converse with the agent."""
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 
 from app.models.schemas import ExternalAgentHistoryResponse, ExternalAgentResponse
 from app.services.external_agent_service import ExternalAgentService
 from app.utils.logging import get_logger
+from app.utils.request_helpers import get_redirect_uri_from_request
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,7 @@ external_agent_service = ExternalAgentService()
     status_code=status.HTTP_200_OK,
 )
 async def obtain_agent_answer(
+    request: Request,
     external_user_id: str = Form(..., description="External user identifier"),
     username: str | None = Form(
         default=None,
@@ -47,6 +49,8 @@ async def obtain_agent_answer(
 
     The endpoint accepts multipart/form-data so frontends can upload images directly.
     """
+    redirect_uri = get_redirect_uri_from_request(request)
+
     try:
         image_bytes: list[bytes] = []
         if images:
@@ -60,6 +64,7 @@ async def obtain_agent_answer(
             external_chat_id=external_chat_id,
             username=username,
             name=name,
+            redirect_uri=redirect_uri,
             message_text=message_text,
             image_files=image_bytes,
         )

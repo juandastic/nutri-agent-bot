@@ -108,7 +108,7 @@ def create_register_nutritional_info_tool(user_id: int):
                 )
             else:
                 # Only saved in database
-                response_parts.append("The data has been saved to your internal records.")
+                response_parts.append("The data has been saved to your internal records, if you want to see it in your Google Sheet, you need to connect your Google account, ask me how in case you want to do that.")
 
             return "\n".join(response_parts)
 

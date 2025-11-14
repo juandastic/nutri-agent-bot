@@ -260,6 +260,8 @@ Process a conversation turn coming from an external frontend (web/mobile) using 
 - `message_text` (optional, form field): Message text for the agent.
 - `images` (optional, file field, repeatable): One or more image files to analyze.
 
+**Note:** The backend automatically derives the OAuth redirect URI from the request host; clients do not need to send it.
+
 ### `GET /api/messages`
 Retrieve the recent conversation history for an external user. Returns the latest messages associated with the resolved chat.
 
