@@ -1,6 +1,7 @@
 """FastAPI application initialization"""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers.agent_answer import router as agent_answer_router
@@ -26,6 +27,14 @@ def create_app() -> FastAPI:
         title="Telegram Bot Webhook API",
         description="A FastAPI application for managing a Telegram bot using webhooks",
         version="1.0.0",
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # Include routers
