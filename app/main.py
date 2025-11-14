@@ -24,8 +24,8 @@ def create_app() -> FastAPI:
         raise ValueError(f"Configuration error: {error_msg}")
 
     app = FastAPI(
-        title="Telegram Bot Webhook API",
-        description="A FastAPI application for managing a Telegram bot using webhooks",
+        title="NutriAgent Bot API",
+        description="A FastAPI application for NutriAgent - an AI-powered nutrition tracking agent available on Telegram and via REST API",
         version="1.0.0",
     )
 
@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def root():
         """Root endpoint for health check"""
-        return {"message": "Telegram Bot Webhook API is running"}
+        return {"message": "NutriAgent Bot API is running"}
 
     logger.info("FastAPI application initialized")
     return app

@@ -1,10 +1,10 @@
 # NutriAgent Bot
 
-A conversational Telegram bot that helps you track your nutrition and meals through natural language conversations and image recognition. Send photos of your meals or describe them in text, and the bot will intelligently detect ingredients and estimate nutritional information. Connect your Google account to automatically record all your nutrition data in your own Google Sheets spreadsheet.
+A conversational AI agent that helps you track your nutrition and meals through natural language conversations and image recognition. Available on **Telegram** and via **Web API**, you can send photos of your meals or describe them in text, and the agent will intelligently detect ingredients and estimate nutritional information. Connect your Google account to automatically record all your nutrition data in your own Google Sheets spreadsheet.
 
 ## 🎯 Project Goal
 
-NutriAgent Bot makes nutrition tracking effortless by combining the convenience of Telegram messaging with the power of AI and your own data storage. Instead of manually logging meals in apps, simply chat with the bot about what you ate (or send a photo), and it will intelligently extract and record the information in a spreadsheet you own and control.
+NutriAgent Bot makes nutrition tracking effortless by combining the convenience of messaging (Telegram or Web) with the power of AI and your own data storage. Instead of manually logging meals in apps, simply chat with the agent about what you ate (or send a photo), and it will intelligently extract and record the information in a spreadsheet you own and control.
 
 ## 💡 The Idea
 
@@ -17,6 +17,7 @@ Nutrition tracking shouldn't be complicated or require switching between multipl
 
 ### How It Works
 
+**Telegram:**
 - Start a conversation with the bot on Telegram
 - Share what you ate in two ways:
   - **Text messages**: "I had a grilled chicken salad with olive oil dressing for lunch"
@@ -26,17 +27,27 @@ Nutrition tracking shouldn't be complicated or require switching between multipl
 - The bot creates a new Google Sheet and begins recording your meals automatically
 - All your nutrition data is stored in your spreadsheet, which you can view, edit, or analyze however you want
 
+**Web Chat:**
+- Integrate NutriAgent into your web or mobile application using the REST API
+- Send text messages and images via HTTP requests
+- Retrieve conversation history to build your own chat interface
+- All the same AI-powered features available through the API
+- Users can connect their Google account through OAuth to enable automatic spreadsheet recording
+
 ## ✨ Features
 
-- **Natural Language Processing**: Chat with the bot about your meals using everyday language
-- **Image Recognition**: Send photos of your meals and the bot will detect ingredients and estimate nutritional information
-- **Conversational Refinement**: Improve accuracy by adding context through conversation. For example, send a photo of french fries with a caption explaining they were air-fried instead of deep-fried, and the bot will adjust its nutritional estimation accordingly
+- **Multi-Platform Support**: Available on Telegram and via REST API for web/mobile integration
+- **Natural Language Processing**: Chat with the agent about your meals using everyday language
+- **Image Recognition**: Send photos of your meals and the agent will detect ingredients and estimate nutritional information
+- **Conversational Refinement**: Improve accuracy by adding context through conversation. For example, send a photo of french fries with a caption explaining they were air-fried instead of deep-fried, and the agent will adjust its nutritional estimation accordingly
 - **Intelligent Meal Extraction**: AI-powered agent extracts nutrition information from both text messages and images
 - **Google Sheets Integration**: Automatically creates and updates a spreadsheet in your Google Drive
 - **OAuth Authentication**: Secure Google account connection using OAuth 2.0
 - **Conversational Interface**: Ask questions, get clarifications, and manage your nutrition goals through conversation
 - **Data Ownership**: All your data is stored in your own Google Sheet - you have full control and access
 - **Telegram Integration**: Access your nutrition tracker directly from Telegram, no separate app needed
+- **Web API**: Build custom web or mobile interfaces using the REST API endpoints
+- **Conversation History**: Retrieve past messages and conversation context via API
 
 ## 🚀 Getting Started
 
@@ -81,17 +92,15 @@ You'll know it's activated when you see `(venv)` at the start of your terminal p
 
 3. Install dependencies:
 ```bash
-pip install -r requirements.txt
+# Using the virtual environment's pip
+./venv/bin/pip install -r requirements.txt
 ```
 
-**Note:** If you get a "command not found" error, try `pip3` instead of `pip`.
+**Note:** If you're using the virtual environment, always use `./venv/bin/pip` instead of `pip` or `pip3`. If your virtual environment is activated, you can use `pip install -r requirements.txt` directly.
 
 4. Configure environment variables:
-```bash
-cp .env.example .env
-```
 
-Edit `.env` and add your values:
+Create a `.env` file in the project root and add your values:
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 SUPABASE_URL=your_supabase_url
@@ -100,25 +109,27 @@ OPENAI_API_KEY=your_openai_api_key
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 WEBHOOK_URL=https://yourdomain.com/webhook
+TELEGRAM_WEBHOOK_SECRET=your_webhook_secret_token  # Optional but recommended
+LOG_LEVEL=INFO
+ENVIRONMENT=development
 ```
-
-
-
 
 
 ### Running the Application
 
 #### Development
 
-Run the application with uvicorn:
+**Using uvicorn directly:**
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Or use the entry point:
+**Using the entry point script:**
 ```bash
-python main.py
+./venv/bin/python main.py
 ```
+
+**Note:** Make sure your virtual environment is activated or use `./venv/bin/python` as shown above.
 
 The API will be available at `http://localhost:8000`
 
@@ -126,7 +137,12 @@ The API will be available at `http://localhost:8000`
 
 For production, use a process manager like systemd or supervisor. Example with uvicorn:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+./venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+Or use the Python entry point:
+```bash
+./venv/bin/python main.py
 ```
 
 ## 🔧 Development Setup
@@ -138,7 +154,9 @@ For local development, you can use [ngrok](https://ngrok.com/) to expose your lo
 1. Install ngrok
 2. Start your FastAPI application:
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+./venv/bin/python main.py
+# Or
+./venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 3. In another terminal, start ngrok:
@@ -252,8 +270,10 @@ Receives Telegram updates. This endpoint is called by Telegram when messages are
 ### `POST /api/answer`
 Process a conversation turn coming from an external frontend (web/mobile) using multipart/form-data. Accepts text, optional images, and user metadata to interact with the NutriAgent.
 
+**Content-Type:** `multipart/form-data`
+
 **Fields:**
-- `external_user_id` (required, form field): External user identifier.
+- `external_user_id` (required, form field): External user identifier (e.g., user ID from your system).
 - `username` (optional, form field): Username or email to associate with the user.
 - `name` (optional, form field): Human readable name for the user.
 - `external_chat_id` (optional, form field): Chat identifier. When omitted, a general chat per user is used.
@@ -262,6 +282,27 @@ Process a conversation turn coming from an external frontend (web/mobile) using 
 
 **Note:** The backend automatically derives the OAuth redirect URI from the request host; clients do not need to send it.
 
+**Example Request:**
+```bash
+curl -X POST https://your-domain.com/api/answer \
+  -F "external_user_id=user123" \
+  -F "message_text=I had a grilled chicken salad for lunch" \
+  -F "images=@meal_photo.jpg"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "response_text": "I've recorded your grilled chicken salad...",
+  "user_id": 1,
+  "chat_id": 1,
+  "external_chat_id": "user123",
+  "bot_message_id": 42,
+  "timestamp": "2024-01-15T12:00:00Z"
+}
+```
+
 ### `GET /api/messages`
 Retrieve the recent conversation history for an external user. Returns the latest messages associated with the resolved chat.
 
@@ -269,6 +310,46 @@ Retrieve the recent conversation history for an external user. Returns the lates
 - `external_user_id` (required): External user identifier.
 - `external_chat_id` (optional): Explicit chat identifier. When omitted, the default per-user chat is used.
 - `limit` (optional, default 20, max 100): Number of recent messages to return.
+
+**Example Request:**
+```bash
+curl "https://your-domain.com/api/messages?external_user_id=user123&limit=50"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": 1,
+  "chat_id": 1,
+  "external_chat_id": "user123",
+  "messages": [
+    {
+      "id": 1,
+      "role": "user",
+      "message_type": "text",
+      "text": "I had a grilled chicken salad",
+      "from_user_id": 1,
+      "created_at": "2024-01-15T12:00:00Z",
+      "updated_at": null
+    },
+    {
+      "id": 2,
+      "role": "assistant",
+      "message_type": "text",
+      "text": "I've recorded your meal...",
+      "from_user_id": null,
+      "created_at": "2024-01-15T12:00:05Z",
+      "updated_at": null
+    }
+  ]
+}
+```
+
+### `GET /auth/google/callback`
+OAuth callback endpoint for Google account authentication. This endpoint is called by Google after a user authorizes access to their Google account. Used by both Telegram and web chat users to connect their Google Sheets account.
+
+**Note:** This endpoint is automatically called by Google during the OAuth flow. Users should not call this directly - instead, they should initiate the OAuth flow through the agent (by requesting to connect their Google account).
 
 ## ⚙️ Environment Variables
 
@@ -280,6 +361,7 @@ Retrieve the recent conversation history for an external user. Returns the lates
 
 ### Optional
 - `WEBHOOK_URL`: Your webhook URL (optional, auto-detected if not set)
+- `TELEGRAM_WEBHOOK_SECRET`: Secret token for webhook verification (optional, recommended for production)
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID (optional, required for Google Sheets integration)
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret (optional, required for Google Sheets integration)
 - `LOG_LEVEL`: Logging level (default: "INFO")
@@ -318,32 +400,36 @@ source venv/bin/activate  # macOS/Linux
 venv\Scripts\activate     # Windows
 ```
 
-2. Install ruff:
+2. Install ruff (if not already installed):
 ```bash
-pip install ruff
+./venv/bin/pip install ruff
 ```
+
+**Note:** Ruff is already listed in `requirements.txt`, so it should be installed when you run `pip install -r requirements.txt`.
 
 ### Usage
 
 **Format all Python files:**
 ```bash
-ruff format .
+./venv/bin/ruff format .
 ```
 
 **Check and auto-fix linting issues:**
 ```bash
-ruff check --fix .
+./venv/bin/ruff check --fix .
 ```
 
 **Format and lint in one command:**
 ```bash
-ruff format . && ruff check --fix .
+./venv/bin/ruff format . && ./venv/bin/ruff check --fix .
 ```
 
 Or use the provided script:
 ```bash
 ./format.sh
 ```
+
+**Note:** If your virtual environment is activated, you can use `ruff` directly instead of `./venv/bin/ruff`.
 
 ### Configuration
 
@@ -360,7 +446,6 @@ nutriAgentBot/
 ├── requirements.txt             # Python dependencies
 ├── pyproject.toml               # Ruff configuration for code formatting
 ├── format.sh                    # Script for formatting code
-├── .env.example                 # Example environment variables file
 ├── README.md                    # This file
 ├── database/                    # Database schema files
 │   └── schema.sql               # Database schema definitions
@@ -375,20 +460,26 @@ nutriAgentBot/
     ├── config.py                # Configuration and settings
     ├── routers/                 # API route handlers
     │   ├── __init__.py
-    │   ├── webhook.py           # Webhook endpoints
+    │   ├── webhook.py           # Telegram webhook endpoints
+    │   ├── agent_answer.py      # External agent API endpoints (web chat)
     │   └── auth.py              # OAuth authentication endpoints
     ├── services/                # Business logic services
     │   ├── __init__.py
     │   ├── telegram_service.py  # Telegram API interactions
-    │   ├── message_handler.py   # Message processing logic
+    │   ├── message_handler.py   # Telegram message processing logic
+    │   ├── external_agent_service.py  # External agent service (web chat)
     │   ├── google_sheets_service.py  # Google Sheets integration
-    │   └── google_oauth_service.py   # Google OAuth flow
+    │   ├── google_oauth_service.py   # Google OAuth flow
+    │   ├── command_handler.py   # Telegram command handling
+    │   └── media_handler.py     # Media file handling
     ├── agents/                  # LangChain agents
     │   ├── __init__.py
     │   └── langchain_agent.py   # LangChain agent for message processing
     ├── tools/                   # LangChain tools
     │   ├── __init__.py
-    │   └── spreadsheet_tool.py  # Tool for spreadsheet operations
+    │   ├── query_nutritional_info_tool.py  # Query nutritional info
+    │   ├── register_google_account_tool.py  # Register Google account
+    │   └── register_nutritional_info_tool.py  # Register nutritional info
     ├── db/                      # Database utilities
     │   ├── supabase_client.py   # Supabase client configuration
     │   └── utils.py             # Database helper functions
@@ -401,7 +492,8 @@ nutriAgentBot/
     │   └── auth_success.html    # OAuth success page template
     └── utils/                   # Utility functions
         ├── __init__.py
-        └── logging.py           # Logging configuration
+        ├── logging.py           # Logging configuration
+        └── request_helpers.py   # Request helper utilities
 ```
 
 ## 🛠️ Error Handling
