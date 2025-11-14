@@ -249,6 +249,25 @@ Receives Telegram updates. This endpoint is called by Telegram when messages are
 
 **Note:** This endpoint should be publicly accessible via HTTPS. Telegram will send POST requests to this endpoint with update JSON payloads.
 
+### `POST /api/answer`
+Process a conversation turn coming from an external frontend (web/mobile) using multipart/form-data. Accepts text, optional images, and user metadata to interact with the NutriAgent.
+
+**Fields:**
+- `external_user_id` (required, form field): External user identifier.
+- `username` (optional, form field): Username or email to associate with the user.
+- `name` (optional, form field): Human readable name for the user.
+- `external_chat_id` (optional, form field): Chat identifier. When omitted, a general chat per user is used.
+- `message_text` (optional, form field): Message text for the agent.
+- `images` (optional, file field, repeatable): One or more image files to analyze.
+
+### `GET /api/messages`
+Retrieve the recent conversation history for an external user. Returns the latest messages associated with the resolved chat.
+
+**Query parameters:**
+- `external_user_id` (required): External user identifier.
+- `external_chat_id` (optional): Explicit chat identifier. When omitted, the default per-user chat is used.
+- `limit` (optional, default 20, max 100): Number of recent messages to return.
+
 ## ⚙️ Environment Variables
 
 ### Required

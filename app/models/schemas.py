@@ -50,3 +50,25 @@ class ExternalAgentResponse(BaseModel):
     external_chat_id: str
     bot_message_id: int
     timestamp: str
+
+
+class ExternalMessage(BaseModel):
+    """Message structure returned in history responses."""
+
+    id: int
+    role: str
+    message_type: str
+    text: str | None
+    from_user_id: int | None
+    created_at: str
+    updated_at: str | None = None
+
+
+class ExternalAgentHistoryResponse(BaseModel):
+    """Response model for external agent history retrieval."""
+
+    success: bool
+    user_id: int
+    chat_id: int
+    external_chat_id: str
+    messages: list[ExternalMessage]

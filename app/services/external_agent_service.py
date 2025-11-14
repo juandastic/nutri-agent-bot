@@ -194,3 +194,54 @@ class ExternalAgentService:
             "bot_message_id": bot_message["id"],
             "timestamp": datetime.utcnow().isoformat(),
         }
+
+    async def get_history(
+        self,
+        *,
+        external_user_id: str,
+        external_chat_id: str | None,
+        limit: int,
+    ) -> dict[str, int | str | list[dict[str, str | int | None]]]:
+        """
+        Retrieve recent conversation history for an external user.
+
+        Args:
+            external_user_id: String identifier provided by the external frontend.
+            external_chat_id: Optional chat identifier. When omitted, a general chat is used.
+            limit: Maximum number of messages to return.
+
+        Returns:
+            dict containing the resolved identifiers and the list of recent messages.
+        """
+        if not external_user_id:
+            raise ValueError("external_user_id is required")
+        if limit <= 0:
+            raise ValueError("limit must be greater than zero")
+
+        user, chat, resolved_chat_id = await self._ensure_user_and_chat(
+            external_user_id=external_user_id,
+            external_chat_id=external_chat_id,
+            username=None,
+            name=None,
+        )
+
+        messages = await get_recent_messages(chat_id=chat["id"], limit=limit)
+        formatted_messages = [
+            {
+                "id": message["id"],
+                "role": message["role"],
+                "message_type": message["message_type"],
+                "text": message["text"],
+                "from_user_id": message["from_user_id"],
+                "created_at": message["created_at"],
+                "updated_at": message["updated_at"],
+            }
+            for message in messages
+        ]
+
+        return {
+            "user_id": user["id"],
+            "chat_id": chat["id"],
+            "external_chat_id": resolved_chat_id,
+            "messages": formatted_messages,
+        }
