@@ -9,9 +9,12 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Scopes required for Google Sheets
+# Scopes required for Google Sheets and user info (needed for Clerk integration)
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
 
