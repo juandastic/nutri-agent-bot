@@ -19,6 +19,14 @@ external_agent_service = ExternalAgentService()
 )
 async def obtain_agent_answer(
     external_user_id: str = Form(..., description="External user identifier"),
+    username: str | None = Form(
+        default=None,
+        description="Optional username for registering the external user",
+    ),
+    name: str | None = Form(
+        default=None,
+        description="Optional human-readable name for the external user",
+    ),
     message_text: str | None = Form(
         default=None,
         description="Optional text message provided by the user",
@@ -50,6 +58,8 @@ async def obtain_agent_answer(
         result = await external_agent_service.process(
             external_user_id=external_user_id,
             external_chat_id=external_chat_id,
+            username=username,
+            name=name,
             message_text=message_text,
             image_files=image_bytes,
         )

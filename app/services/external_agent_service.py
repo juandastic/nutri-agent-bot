@@ -55,12 +55,14 @@ class ExternalAgentService:
         *,
         external_user_id: str,
         external_chat_id: str | None,
+        username: str | None,
+        name: str | None,
     ) -> tuple[UserDict, ChatDict, str]:
         """Guarantee that the user and chat exist in the database."""
         user = await get_or_create_user(
             external_user_id=external_user_id,
-            username=None,
-            first_name=None,
+            username=username,
+            first_name=name,
         )
         resolved_chat_id = self._resolve_chat_identifier(external_user_id, external_chat_id)
         chat = await get_or_create_chat(
@@ -119,6 +121,8 @@ class ExternalAgentService:
         *,
         external_user_id: str,
         external_chat_id: str | None,
+        username: str | None,
+        name: str | None,
         message_text: str | None,
         image_files: Iterable[bytes] | None,
     ) -> dict[str, int | str]:
@@ -128,6 +132,8 @@ class ExternalAgentService:
         Args:
             external_user_id: String identifier provided by the external frontend.
             external_chat_id: Optional chat identifier. When omitted, a general chat is used.
+            username: Optional username for first-time user registration.
+            name: Optional name for first-time user registration.
             message_text: Optional textual message content.
             image_files: Optional iterable of raw image bytes.
 
@@ -140,6 +146,8 @@ class ExternalAgentService:
         images = list(image_files) if image_files else []
         has_text = bool(message_text and message_text.strip())
         has_images = bool(images)
+        sanitized_username = username.strip() if username and username.strip() else None
+        sanitized_name = name.strip() if name and name.strip() else None
 
         if not has_text and not has_images:
             raise ValueError("Message must include text or at least one image")
@@ -147,6 +155,8 @@ class ExternalAgentService:
         user, chat, resolved_chat_id = await self._ensure_user_and_chat(
             external_user_id=external_user_id,
             external_chat_id=external_chat_id,
+            username=sanitized_username,
+            name=sanitized_name,
         )
 
         history_for_agent = await self._prepare_history(chat_id=chat["id"])
