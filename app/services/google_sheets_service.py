@@ -272,7 +272,7 @@ async def append_nutritional_data(
         sheets_service.spreadsheets().values().append(
             spreadsheetId=spreadsheet_id,
             range=f"{DEFAULT_WORKSHEET_NAME}!A:H",
-            valueInputOption="RAW",
+            valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body=body,
         ).execute()
