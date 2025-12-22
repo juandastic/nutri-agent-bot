@@ -71,6 +71,7 @@ class FoodAnalysisAgent:
             Runnable: Compiled agent graph
         """
         # Create tools bound to user_id and redirect_uri
+        # Note: Account linking is handled via /linkweb command, not agent tools
         bound_tools = [
             create_register_nutritional_info_tool(user_id),
             create_query_nutritional_info_tool(user_id),

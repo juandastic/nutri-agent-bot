@@ -214,13 +214,13 @@ class MessageHandler:
             tuple containing (user dict, chat dict)
         """
         user = await get_or_create_user(
-            external_user_id=external_user_id,
+            telegram_user_id=external_user_id,
             username=username,
             first_name=first_name,
         )
 
         logger.info(
-            f"User processed | user_id={user['id']} | external_user_id={external_user_id} | "
+            f"User processed | user_id={user['id']} | telegram_user_id={external_user_id} | "
             f"username={username}"
         )
 

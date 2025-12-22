@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers.agent_answer import router as agent_answer_router
 from app.routers.auth import router as auth_router
+from app.routers.user import router as user_router
 from app.routers.webhook import router as webhook_router
 from app.utils.logging import get_logger, setup_logging
 
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(agent_answer_router)
     app.include_router(auth_router)
+    app.include_router(user_router)
 
     # Root endpoint
     @app.get("/")

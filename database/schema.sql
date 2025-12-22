@@ -20,12 +20,19 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     external_user_id TEXT UNIQUE,
+    telegram_user_id TEXT UNIQUE,              -- Telegram user ID for linking
+    clerk_user_id TEXT UNIQUE,                 -- Clerk user ID (web) for linking
+    email VARCHAR UNIQUE,                       -- Email for account unification
+    email_verified_at TIMESTAMP WITH TIME ZONE, -- When email was verified/linked
     username VARCHAR,
     first_name VARCHAR,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_external_user_id ON users(external_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_clerk_user_id ON users(clerk_user_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 CREATE TABLE IF NOT EXISTS chats (
     id SERIAL PRIMARY KEY,
@@ -86,6 +93,21 @@ CREATE TABLE IF NOT EXISTS nutritional_info (
 
 CREATE INDEX IF NOT EXISTS idx_nutritional_info_user_id ON nutritional_info(user_id);
 CREATE INDEX IF NOT EXISTS idx_nutritional_info_created_at ON nutritional_info(created_at);
+
+-- telegram_linking_codes table (for web-initiated account linking)
+CREATE TABLE IF NOT EXISTS telegram_linking_codes (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(8) NOT NULL UNIQUE,
+    clerk_user_id TEXT NOT NULL,              -- Clerk user ID from web
+    clerk_email TEXT NOT NULL,                -- Email from Clerk (already verified)
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    linked_user_id INTEGER REFERENCES users(id),  -- Telegram user that claimed it
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linking_codes_code ON telegram_linking_codes(code);
+CREATE INDEX IF NOT EXISTS idx_linking_codes_clerk_user ON telegram_linking_codes(clerk_user_id);
 
 -- ============================================================================
 -- Notes

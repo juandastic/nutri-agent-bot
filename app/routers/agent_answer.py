@@ -20,7 +20,11 @@ external_agent_service = ExternalAgentService()
 )
 async def obtain_agent_answer(
     request: Request,
-    external_user_id: str = Form(..., description="External user identifier"),
+    clerk_user_id: str = Form(..., description="Clerk user ID from web authentication"),
+    email: str | None = Form(
+        default=None,
+        description="Optional email for user registration",
+    ),
     username: str | None = Form(
         default=None,
         description="Optional username for registering the external user",
@@ -60,10 +64,11 @@ async def obtain_agent_answer(
                     image_bytes.append(content)
 
         result = await external_agent_service.process(
-            external_user_id=external_user_id,
+            clerk_user_id=clerk_user_id,
             external_chat_id=external_chat_id,
             username=username,
             name=name,
+            email=email,
             redirect_uri=redirect_uri,
             message_text=message_text,
             image_files=image_bytes,
@@ -94,7 +99,7 @@ async def obtain_agent_answer(
     status_code=status.HTTP_200_OK,
 )
 async def get_messages(
-    external_user_id: str = Query(..., description="External user identifier"),
+    clerk_user_id: str = Query(..., description="Clerk user ID from web authentication"),
     external_chat_id: str | None = Query(
         default=None,
         description=(
@@ -109,13 +114,13 @@ async def get_messages(
     ),
 ) -> ExternalAgentHistoryResponse:
     """
-    Retrieve recent messages for an external user.
+    Retrieve recent messages for a web user.
 
     The endpoint returns the most recent messages associated with the resolved chat identifier.
     """
     try:
         result = await external_agent_service.get_history(
-            external_user_id=external_user_id,
+            clerk_user_id=clerk_user_id,
             external_chat_id=external_chat_id,
             limit=limit,
         )

@@ -34,7 +34,7 @@ class ExternalAgentService:
         ]
 
     @staticmethod
-    def _resolve_chat_identifier(external_user_id: str, external_chat_id: str | None) -> str:
+    def _resolve_chat_identifier(clerk_user_id: str, external_chat_id: str | None) -> str:
         """
         Determine which chat identifier to use.
 
@@ -43,7 +43,7 @@ class ExternalAgentService:
         """
         if external_chat_id:
             return external_chat_id
-        return f"{external_user_id}__general_chat"
+        return f"{clerk_user_id}__general_chat"
 
     @staticmethod
     def _determine_message_type(has_images: bool) -> str:
@@ -53,28 +53,30 @@ class ExternalAgentService:
     async def _ensure_user_and_chat(
         self,
         *,
-        external_user_id: str,
+        clerk_user_id: str,
         external_chat_id: str | None,
         username: str | None,
         name: str | None,
+        email: str | None = None,
     ) -> tuple[UserDict, ChatDict, str]:
         """Guarantee that the user and chat exist in the database."""
         user = await get_or_create_user(
-            external_user_id=external_user_id,
+            clerk_user_id=clerk_user_id,
             username=username,
             first_name=name,
+            email=email,
         )
-        resolved_chat_id = self._resolve_chat_identifier(external_user_id, external_chat_id)
+        resolved_chat_id = self._resolve_chat_identifier(clerk_user_id, external_chat_id)
         chat = await get_or_create_chat(
             external_chat_id=resolved_chat_id,
             user_id=user["id"],
             chat_type="external",
         )
         logger.debug(
-            "External agent user/chat ready | user_id=%s | external_user_id=%s | "
+            "External agent user/chat ready | user_id=%s | clerk_user_id=%s | "
             "chat_id=%s | external_chat_id=%s",
             user["id"],
-            external_user_id,
+            clerk_user_id,
             chat["id"],
             resolved_chat_id,
         )
@@ -119,10 +121,11 @@ class ExternalAgentService:
     async def process(
         self,
         *,
-        external_user_id: str,
+        clerk_user_id: str,
         external_chat_id: str | None,
         username: str | None,
         name: str | None,
+        email: str | None,
         redirect_uri: str | None,
         message_text: str | None,
         image_files: Iterable[bytes] | None,
@@ -131,10 +134,11 @@ class ExternalAgentService:
         Process an external message and return the agent reply and metadata.
 
         Args:
-            external_user_id: String identifier provided by the external frontend.
+            clerk_user_id: Clerk user ID from web authentication.
             external_chat_id: Optional chat identifier. When omitted, a general chat is used.
             username: Optional username for first-time user registration.
             name: Optional name for first-time user registration.
+            email: Optional email from Clerk for first-time user registration.
             redirect_uri: Optional OAuth redirect URI for external flows.
             message_text: Optional textual message content.
             image_files: Optional iterable of raw image bytes.
@@ -142,14 +146,15 @@ class ExternalAgentService:
         Returns:
             dict containing the response text plus identifiers for the persisted entities.
         """
-        if not external_user_id:
-            raise ValueError("external_user_id is required")
+        if not clerk_user_id:
+            raise ValueError("clerk_user_id is required")
 
         images = list(image_files) if image_files else []
         has_text = bool(message_text and message_text.strip())
         has_images = bool(images)
         sanitized_username = username.strip() if username and username.strip() else None
         sanitized_name = name.strip() if name and name.strip() else None
+        sanitized_email = email.strip().lower() if email and email.strip() else None
         sanitized_redirect_uri = (
             redirect_uri.strip() if redirect_uri and redirect_uri.strip() else None
         )
@@ -158,10 +163,11 @@ class ExternalAgentService:
             raise ValueError("Message must include text or at least one image")
 
         user, chat, resolved_chat_id = await self._ensure_user_and_chat(
-            external_user_id=external_user_id,
+            clerk_user_id=clerk_user_id,
             external_chat_id=external_chat_id,
             username=sanitized_username,
             name=sanitized_name,
+            email=sanitized_email,
         )
 
         history_for_agent = await self._prepare_history(chat_id=chat["id"])
@@ -203,28 +209,28 @@ class ExternalAgentService:
     async def get_history(
         self,
         *,
-        external_user_id: str,
+        clerk_user_id: str,
         external_chat_id: str | None,
         limit: int,
     ) -> dict[str, int | str | list[dict[str, str | int | None]]]:
         """
-        Retrieve recent conversation history for an external user.
+        Retrieve recent conversation history for a web user.
 
         Args:
-            external_user_id: String identifier provided by the external frontend.
+            clerk_user_id: Clerk user ID from web authentication.
             external_chat_id: Optional chat identifier. When omitted, a general chat is used.
             limit: Maximum number of messages to return.
 
         Returns:
             dict containing the resolved identifiers and the list of recent messages.
         """
-        if not external_user_id:
-            raise ValueError("external_user_id is required")
+        if not clerk_user_id:
+            raise ValueError("clerk_user_id is required")
         if limit <= 0:
             raise ValueError("limit must be greater than zero")
 
         user, chat, resolved_chat_id = await self._ensure_user_and_chat(
-            external_user_id=external_user_id,
+            clerk_user_id=clerk_user_id,
             external_chat_id=external_chat_id,
             username=None,
             name=None,
