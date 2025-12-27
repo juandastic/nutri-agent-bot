@@ -1,5 +1,6 @@
 """Media handler service for downloading photos and documents from Telegram"""
 
+import asyncio
 from typing import Any
 
 from app.services.telegram_service import TelegramService
@@ -170,3 +171,75 @@ class MediaHandler:
         images.extend(doc_images)
 
         return images, None
+
+    async def _download_single_photo(self, photos: list) -> bytes | None:
+        """
+        Download the largest photo from a photo array.
+
+        Args:
+            photos: List of photo objects (different sizes of the same photo)
+
+        Returns:
+            bytes of the downloaded image or None if failed
+        """
+        if not photos:
+            return None
+
+        # Use the largest photo (last in array)
+        largest_photo = photos[-1]
+        file_id = largest_photo.get("file_id")
+
+        if not file_id:
+            return None
+
+        try:
+            file_info = await self.telegram_service.get_file_path(file_id)
+            if file_info.get("ok"):
+                file_path = file_info.get("result", {}).get("file_path")
+                if file_path:
+                    image_bytes = await self.telegram_service.download_file(file_path)
+                    logger.debug(f"Downloaded image | file_id={file_id} | size={len(image_bytes)}")
+                    return image_bytes
+        except Exception as e:
+            logger.error(f"Error downloading image | file_id={file_id} | error={str(e)}")
+
+        return None
+
+    async def download_multiple_photo_arrays(
+        self, photo_arrays: list[list[dict[str, Any]]]
+    ) -> list[bytes]:
+        """
+        Download photos from multiple photo arrays in parallel.
+
+        When a user sends multiple photos at once, each photo arrives as a separate
+        message with its own array of photo sizes. This method downloads the largest
+        photo from each array concurrently.
+
+        Args:
+            photo_arrays: List of photo arrays, where each array contains different
+                         sizes of the same photo
+
+        Returns:
+            list[bytes]: List of downloaded image bytes (in order)
+        """
+        if not photo_arrays:
+            return []
+
+        logger.debug(f"Downloading {len(photo_arrays)} photos in parallel")
+
+        # Create download tasks for all photos
+        tasks = [self._download_single_photo(photos) for photos in photo_arrays]
+
+        # Download all in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out None values and exceptions, keeping order
+        images: list[bytes] = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Failed to download photo {i + 1} | error={str(result)}")
+            elif result is not None:
+                images.append(result)
+
+        logger.debug(f"Successfully downloaded {len(images)}/{len(photo_arrays)} photos")
+        return images

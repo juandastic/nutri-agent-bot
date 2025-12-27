@@ -11,6 +11,7 @@ from app.db.utils import (
     get_recent_messages,
 )
 from app.services.command_handler import CommandHandler
+from app.services.media_group_accumulator import MediaGroupAccumulator
 from app.services.media_handler import MediaHandler
 from app.services.telegram_service import TelegramService
 from app.utils.logging import get_logger
@@ -51,6 +52,8 @@ class MessageHandler:
         self.food_agent = FoodAnalysisAgent()
         self.command_handler = CommandHandler(self.telegram_service)
         self.media_handler = MediaHandler(self.telegram_service)
+        # Accumulator for grouping multiple photos sent together
+        self._media_group_accumulator = MediaGroupAccumulator(timeout_seconds=1.0)
 
     def _validate_update(self, update: dict[str, Any]) -> bool:
         """
@@ -388,6 +391,26 @@ class MessageHandler:
 
             message, telegram_chat_id, telegram_message_id, chat_type = message_data
 
+            # Check if this message is part of a media group (multiple photos sent together)
+            media_group_id = message.get("media_group_id")
+            if media_group_id:
+                logger.debug(
+                    f"Message is part of media group | media_group_id={media_group_id} | "
+                    f"message_id={telegram_message_id}"
+                )
+                # Add to accumulator - it will process all messages together after timeout
+                await self._media_group_accumulator.add_message(
+                    media_group_id=media_group_id,
+                    message=message,
+                    telegram_chat_id=telegram_chat_id,
+                    chat_type=chat_type,
+                    redirect_uri=redirect_uri,
+                    process_callback=self._process_media_group,
+                )
+                # Send typing action to show we're receiving the photos
+                await self._send_typing_action(chat_id=telegram_chat_id)
+                return  # Don't process individually, wait for the group
+
             # If this is a callback_query, answer it to remove loading state
             if "callback_query" in update:
                 callback_query_id = update["callback_query"].get("id")
@@ -565,6 +588,137 @@ class MessageHandler:
         except Exception as e:
             logger.error(f"Error generating response | error={str(e)}", exc_info=True)
             return "I apologize, but I encountered an error while analyzing your food. Please try again."
+
+    async def _process_media_group(
+        self,
+        messages: list[dict[str, Any]],
+        telegram_chat_id: int,
+        chat_type: str | None,
+        redirect_uri: str | None,
+    ) -> None:
+        """
+        Process a group of messages that were sent together as a media group.
+
+        Args:
+            messages: List of Telegram message objects in the media group
+            telegram_chat_id: The Telegram chat ID
+            chat_type: The type of chat (private, group, etc.)
+            redirect_uri: OAuth redirect URI
+        """
+        if not messages:
+            logger.warning("Empty media group received, skipping")
+            return
+
+        try:
+            # Use the first message for user info and metadata
+            first_message = messages[0]
+
+            # Extract user info from first message
+            user_info = self._extract_user_info(first_message)
+            if not user_info:
+                return
+
+            external_user_id, username, first_name = user_info
+            external_chat_id = str(telegram_chat_id)
+
+            # Get caption from any message that has one (usually only the first)
+            caption = ""
+            for msg in messages:
+                msg_caption = msg.get("caption", "")
+                if msg_caption:
+                    caption = msg_caption
+                    break
+
+            logger.info(
+                f"Processing media group | chat_id={telegram_chat_id} | "
+                f"photo_count={len(messages)} | has_caption={bool(caption)}"
+            )
+
+            # Send typing action
+            await self._send_typing_action(chat_id=telegram_chat_id)
+
+            # Ensure user and chat exist
+            user, chat = await self._ensure_user_and_chat(
+                external_user_id=external_user_id,
+                username=username,
+                first_name=first_name,
+                external_chat_id=external_chat_id,
+                chat_type=chat_type,
+            )
+
+            # Get conversation history BEFORE saving current message
+            conversation_history = await get_recent_messages(chat_id=chat["id"], limit=10)
+            history_for_agent = self._prepare_conversation_history(conversation_history)
+
+            # Save user message (use first message's ID as representative)
+            first_message_id = first_message.get("message_id")
+            await self._save_user_message(
+                chat_id=chat["id"],
+                combined_text=caption if caption else None,
+                message_type="photo",
+                telegram_message_id=first_message_id,
+                user_id=user["id"],
+            )
+
+            # Collect all photo arrays from all messages
+            all_photo_arrays = []
+            for msg in messages:
+                photos = msg.get("photo", [])
+                if photos:
+                    all_photo_arrays.append(photos)
+
+            # Download all photos using the media handler
+            images = await self.media_handler.download_multiple_photo_arrays(all_photo_arrays)
+
+            logger.debug(
+                f"Downloaded images from media group | count={len(images)} | "
+                f"total_size={sum(len(img) for img in images)}"
+            )
+
+            # Send typing action before calling agent
+            await self._send_typing_action(chat_id=telegram_chat_id)
+
+            # Prepare text input
+            text_input = caption if caption else None
+
+            # Start the agent analysis task with all images
+            analyze_task = asyncio.create_task(
+                self.food_agent.analyze(
+                    text=text_input,
+                    images=images if images else None,
+                    conversation_history=history_for_agent,
+                    user_id=user["id"],
+                    redirect_uri=redirect_uri,
+                )
+            )
+
+            # Keep typing action alive during analysis
+            await self._keep_typing_alive(chat_id=telegram_chat_id, task=analyze_task)
+
+            # Get the result
+            response_text = await analyze_task
+
+            # Save and send response
+            await self._save_and_send_bot_response(
+                chat_id=chat["id"],
+                response_text=response_text,
+                telegram_chat_id=telegram_chat_id,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error processing media group | chat_id={telegram_chat_id} | error={str(e)}",
+                exc_info=True,
+            )
+            # Try to send error message to user
+            try:
+                await self.telegram_service.send_message(
+                    chat_id=telegram_chat_id,
+                    text="I apologize, but I encountered an error while analyzing your photos. "
+                    "Please try again.",
+                )
+            except Exception:
+                pass
 
     async def process_with_attachments(self, update: dict[str, Any]) -> None:
         """
