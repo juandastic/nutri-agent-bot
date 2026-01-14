@@ -6,6 +6,7 @@ from typing import TypedDict
 
 from app.db.supabase_client import supabase
 from app.utils.logging import get_logger
+from app.utils.timezone import DEFAULT_TIMEZONE, validate_timezone
 
 logger = get_logger(__name__)
 
@@ -21,6 +22,7 @@ class UserDict(TypedDict):
     email_verified_at: str | None
     username: str | None
     first_name: str | None
+    timezone: str | None
     created_at: str
 
 
@@ -1276,6 +1278,82 @@ async def unlink_accounts(clerk_user_id: str) -> bool:
     except Exception as e:
         logger.error(
             f"Error in unlink_accounts | clerk_user_id={clerk_user_id} | error={str(e)}",
+            exc_info=True,
+        )
+        raise
+
+
+async def get_user_timezone(user_id: int) -> str:
+    """
+    Get user's timezone, defaulting to UTC if not set or invalid.
+
+    CRITICAL: Always returns a valid timezone string, never None.
+    This function handles missing columns, None values, and invalid timezones gracefully.
+
+    Args:
+        user_id: Internal user ID
+
+    Returns:
+        str: Valid timezone string (defaults to 'UTC' if not set or invalid)
+    """
+    try:
+        # Try to get user with timezone field
+        response = supabase.table("users").select("timezone").eq("id", user_id).execute()
+
+        if response.data and len(response.data) > 0:
+            timezone_str = response.data[0].get("timezone")
+
+            # Check if timezone is set and valid
+            if timezone_str and validate_timezone(timezone_str):
+                return timezone_str
+
+        # Default to UTC if not set or invalid
+        return DEFAULT_TIMEZONE
+
+    except Exception as e:
+        # Catch any database errors (e.g., column doesn't exist) and return UTC
+        logger.warning(
+            f"Error getting user timezone, defaulting to UTC | user_id={user_id} | error={str(e)}"
+        )
+        return DEFAULT_TIMEZONE
+
+
+async def update_user_timezone(user_id: int, timezone: str) -> UserDict:
+    """
+    Update user's timezone.
+
+    Args:
+        user_id: User ID
+        timezone: Timezone string (e.g., 'America/New_York', 'Europe/Madrid', 'UTC')
+                 Must be a valid IANA timezone identifier
+
+    Returns:
+        UserDict: Updated user data
+
+    Raises:
+        ValueError: If timezone string is invalid
+    """
+    # Validate timezone before updating
+    if not validate_timezone(timezone):
+        raise ValueError(f"Invalid timezone: {timezone}")
+
+    try:
+        response = (
+            supabase.table("users")
+            .update({"timezone": timezone})
+            .eq("id", user_id)
+            .execute()
+        )
+
+        if not response.data:
+            raise ValueError("Failed to update user timezone")
+
+        logger.info(f"User timezone updated | user_id={user_id} | timezone={timezone}")
+        return UserDict(**response.data[0])
+
+    except Exception as e:
+        logger.error(
+            f"Error in update_user_timezone | user_id={user_id} | timezone={timezone} | error={str(e)}",
             exc_info=True,
         )
         raise

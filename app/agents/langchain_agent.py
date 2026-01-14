@@ -2,7 +2,7 @@
 
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +13,13 @@ from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from app.config import settings
+from app.db.utils import get_user_timezone
 from app.tools.query_nutritional_info_tool import create_query_nutritional_info_tool
 from app.tools.register_google_account_tool import create_register_google_account_tool
 from app.tools.register_nutritional_info_tool import create_register_nutritional_info_tool
+from app.tools.update_user_timezone_tool import create_update_user_timezone_tool
 from app.utils.logging import get_logger
+from app.utils.timezone import format_datetime_in_timezone
 
 logger = get_logger(__name__)
 
@@ -42,12 +45,14 @@ class FoodAnalysisAgent:
             api_key=settings.OPENAI_API_KEY,
             temperature=0.3,
         )
-        self.system_prompt = self._create_system_prompt()
 
-    def _create_system_prompt(self) -> str:
+    async def _create_system_prompt(self, user_id: int | None = None) -> str:
         """
         Create the system prompt for food analysis.
-        Loads the prompt from a text file and injects the current datetime.
+        Loads the prompt from a text file and injects the current datetime in user's timezone.
+
+        Args:
+            user_id: Internal user ID (optional, defaults to UTC if not provided)
 
         Returns:
             str: System prompt text
@@ -56,10 +61,27 @@ class FoodAnalysisAgent:
             FileNotFoundError: If the prompt file does not exist
         """
         prompt_template = PROMPT_FILE.read_text(encoding="utf-8")
-        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Get user timezone (defaults to UTC if not set)
+        timezone_str = "UTC"
+        if user_id:
+            try:
+                timezone_str = await get_user_timezone(user_id)
+            except Exception as e:
+                logger.warning(
+                    f"Error getting user timezone, using UTC | user_id={user_id} | error={str(e)}"
+                )
+                timezone_str = "UTC"
+
+        # Format current datetime in user's timezone
+        # Use UTC time to avoid server timezone issues
+        current_datetime = format_datetime_in_timezone(
+            datetime.now(timezone.utc), timezone_str, "%Y-%m-%d %H:%M:%S"
+        )
+
         return prompt_template.format(current_datetime=current_datetime)
 
-    def _get_agent(self, user_id: int, redirect_uri: str | None = None) -> Runnable:
+    async def _get_agent(self, user_id: int, redirect_uri: str | None = None) -> Runnable:
         """
         Get or create agent with tools bound to user_id.
 
@@ -76,13 +98,17 @@ class FoodAnalysisAgent:
             create_register_nutritional_info_tool(user_id),
             create_query_nutritional_info_tool(user_id),
             create_register_google_account_tool(user_id, redirect_uri),
+            create_update_user_timezone_tool(user_id),
         ]
+
+        # Create system prompt with user's timezone
+        system_prompt = await self._create_system_prompt(user_id)
 
         # Create agent using LangChain 1.0 API
         agent = create_agent(
             model=self.llm,
             tools=bound_tools,
-            system_prompt=self.system_prompt,
+            system_prompt=system_prompt,
         )
 
         return agent
@@ -140,7 +166,7 @@ class FoodAnalysisAgent:
             if user_id is None:
                 raise ValueError("user_id is required for agent execution")
 
-            agent = self._get_agent(user_id, redirect_uri)
+            agent = await self._get_agent(user_id, redirect_uri)
 
             # Build messages for the agent
             messages = []

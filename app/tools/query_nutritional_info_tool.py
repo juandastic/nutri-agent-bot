@@ -1,9 +1,13 @@
 """LangChain tool for querying nutritional information"""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from langchain_core.tools import tool
 
-from app.db.utils import get_nutritional_info
+from app.db.utils import get_nutritional_info, get_user_timezone
 from app.utils.logging import get_logger
+from app.utils.timezone import format_datetime_in_timezone
 
 logger = get_logger(__name__)
 
@@ -55,20 +59,39 @@ def create_query_nutritional_info_tool(user_id: int):
             if not records:
                 return "No nutritional records found."
 
+            # Get user timezone (defaults to UTC if not set)
+            timezone_str = await get_user_timezone(user_id)
+
             # Return simple format: one record per line
             lines = []
             for record in records:
-                # Extract date from created_at (format: YYYY-MM-DDTHH:MM:SS...)
-                date = record["created_at"].split("T")[0]
-                time = (
-                    record["created_at"].split("T")[1].split(".")[0]
-                    if "T" in record["created_at"]
-                    else ""
-                )
+                # Parse UTC timestamp from created_at
+                try:
+                    # Parse ISO format timestamp (assumes UTC)
+                    utc_dt = datetime.fromisoformat(record["created_at"].replace("Z", "+00:00"))
+                    if utc_dt.tzinfo is None:
+                        # If no timezone info, assume UTC
+                        utc_dt = utc_dt.replace(tzinfo=ZoneInfo("UTC"))
+
+                    # Convert to user timezone and format
+                    date_str = format_datetime_in_timezone(utc_dt, timezone_str, "%Y-%m-%d")
+                    time_str = format_datetime_in_timezone(utc_dt, timezone_str, "%H:%M:%S")
+                except Exception as e:
+                    # Fallback to original format if parsing fails
+                    logger.warning(
+                        f"Error parsing timestamp, using original format | "
+                        f"created_at={record['created_at']} | error={str(e)}"
+                    )
+                    date_str = record["created_at"].split("T")[0]
+                    time_str = (
+                        record["created_at"].split("T")[1].split(".")[0]
+                        if "T" in record["created_at"]
+                        else ""
+                    )
 
                 line_parts = [
-                    f"Date: {date}",
-                    f"Time: {time}",
+                    f"Date: {date_str}",
+                    f"Time: {time_str}",
                     f"Meal: {record['meal_type']}",
                     f"Calories: {record['calories']}",
                     f"Proteins: {record['proteins']}g",

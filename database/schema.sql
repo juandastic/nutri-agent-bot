@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified_at TIMESTAMP WITH TIME ZONE, -- When email was verified/linked
     username VARCHAR,
     first_name VARCHAR,
+    timezone VARCHAR(50) DEFAULT 'UTC',         -- User timezone for date display (e.g., 'America/New_York', 'Europe/Madrid')
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

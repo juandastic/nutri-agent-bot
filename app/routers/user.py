@@ -8,9 +8,12 @@ from app.db.utils import (
     get_active_linking_code,
     get_user_by_clerk_id,
     get_user_link_status,
+    get_user_timezone,
     unlink_accounts,
+    update_user_timezone,
 )
 from app.utils.logging import get_logger
+from app.utils.timezone import validate_timezone
 
 logger = get_logger(__name__)
 
@@ -57,6 +60,21 @@ class UnlinkResponse(BaseModel):
 
     success: bool
     message: str
+
+
+class TimezoneResponse(BaseModel):
+    """Response model for timezone endpoint"""
+
+    success: bool
+    timezone: str
+    message: str | None = None
+
+
+class UpdateTimezoneRequest(BaseModel):
+    """Request model for update timezone endpoint"""
+
+    clerk_user_id: str
+    timezone: str
 
 
 @router.get(
@@ -223,4 +241,116 @@ async def unlink(request: UnlinkRequest) -> UnlinkResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to unlink account",
+        ) from exc
+
+
+@router.get(
+    "/timezone",
+    response_model=TimezoneResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_timezone(
+    clerk_user_id: str = Query(..., description="Clerk user ID from web authentication"),
+) -> TimezoneResponse:
+    """
+    Get the user's timezone setting.
+
+    Args:
+        clerk_user_id: Clerk user ID from web authentication
+
+    Returns:
+        TimezoneResponse with the user's timezone (defaults to 'UTC' if not set)
+    """
+    try:
+        # Find user by clerk_user_id
+        user = await get_user_by_clerk_id(clerk_user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        # Get user timezone (defaults to UTC if not set)
+        timezone_str = await get_user_timezone(user["id"])
+
+        return TimezoneResponse(
+            success=True,
+            timezone=timezone_str,
+            message=None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Error getting timezone | clerk_user_id=%s | error=%s",
+            clerk_user_id,
+            str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get timezone",
+        ) from exc
+
+
+@router.put(
+    "/timezone",
+    response_model=TimezoneResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def update_timezone(request: UpdateTimezoneRequest) -> TimezoneResponse:
+    """
+    Update the user's timezone setting.
+
+    Args:
+        request: Contains clerk_user_id and timezone
+
+    Returns:
+        TimezoneResponse with updated timezone
+    """
+    try:
+        # Validate timezone
+        if not validate_timezone(request.timezone):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid timezone: {request.timezone}. Please provide a valid IANA timezone identifier.",
+            )
+
+        # Find user by clerk_user_id
+        user = await get_user_by_clerk_id(request.clerk_user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        # Update user timezone
+        await update_user_timezone(user["id"], request.timezone)
+
+        logger.info(
+            f"User timezone updated | user_id={user['id']} | timezone={request.timezone}"
+        )
+
+        return TimezoneResponse(
+            success=True,
+            timezone=request.timezone,
+            message="Timezone updated successfully",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Error updating timezone | clerk_user_id=%s | timezone=%s | error=%s",
+            request.clerk_user_id,
+            request.timezone,
+            str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update timezone",
         ) from exc

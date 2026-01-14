@@ -1,14 +1,15 @@
 """Google Sheets service for creating and updating spreadsheets"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app.db.utils import get_spreadsheet_config, update_spreadsheet_config
+from app.db.utils import get_spreadsheet_config, get_user_timezone, update_spreadsheet_config
 from app.services.google_oauth_service import get_credentials_from_tokens, refresh_access_token
 from app.utils.logging import get_logger
+from app.utils.timezone import format_datetime_in_timezone
 
 logger = get_logger(__name__)
 
@@ -250,9 +251,17 @@ async def append_nutritional_data(
     try:
         spreadsheet_id, credentials = await ensure_spreadsheet_exists(user_id)
 
+        # Get user timezone (defaults to UTC if not set)
+        timezone_str = await get_user_timezone(user_id)
+
+        # Use UTC time to avoid server timezone issues
+        now_utc = datetime.now(timezone.utc)
+
         # Use record_id if provided, otherwise use timestamp
-        id_value = record_id if record_id is not None else datetime.now().isoformat()
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        id_value = record_id if record_id is not None else now_utc.isoformat()
+
+        # Format date in user's timezone
+        date_str = format_datetime_in_timezone(now_utc, timezone_str, "%Y-%m-%d")
 
         row_data = [
             id_value,  # Id (from database or timestamp)
