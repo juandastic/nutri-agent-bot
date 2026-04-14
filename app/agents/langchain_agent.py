@@ -39,9 +39,9 @@ class FoodAnalysisAgent:
     """Agent for analyzing food images and text to estimate nutritional values"""
 
     def __init__(self):
-        """Initialize the food analysis agent with OpenAI GPT-4o-mini vision model"""
+        """Initialize the food analysis agent with OpenAI GPT-4.1-mini vision model"""
         self.llm = ChatOpenAI(
-            model="gpt-5.2-2025-12-11",
+            model="gpt-4.1-mini",
             api_key=settings.OPENAI_API_KEY,
             temperature=0.3,
         )
